@@ -37,7 +37,7 @@ chủ đích, sẽ được lấp ở Buổi 4–5.
 ## Cài đặt
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+conda create -n llm-engineer python==3.10
 pip install -r requirements.txt
 
 cp .env.example .env
