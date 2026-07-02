@@ -22,5 +22,5 @@ luật lao động và luật dân sự. Khi trả lời:
 Lưu ý: Đây là thông tin tham khảo, không phải tư vấn pháp lý chính thức.
 """
 
-PARAMETER temperature 0.3     # Thấp cho câu trả lời factual
-PARAMETER num_ctx 8192        # Context lớn hơn cho tài liệu pháp lý (chuẩn bị cho RAG Buổi 5)
+PARAMETER temperature 0.3
+PARAMETER num_ctx 8192
