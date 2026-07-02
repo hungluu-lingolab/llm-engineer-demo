@@ -15,8 +15,16 @@ class Settings(BaseSettings):
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
 
+    # ── Backend (Buổi 2: Local Serving) ──────────────────────────────────────
+    # "openai" = OpenAI Cloud | "ollama" = Ollama local | "vllm" = vLLM server.
+    # Cả 3 đều nói chuyện qua OpenAI-compatible API → phần còn lại của code không đổi.
+    llm_backend: str = Field(default="openai", alias="LLM_BACKEND")
+    # base_url override. Để trống → dùng mặc định của backend (xem llm/backends.py).
+    llm_base_url: str = Field(default="", alias="LLM_BASE_URL")
+
     # ── OpenAI ──────────────────────────────────────────────────────────────
     # Một hoặc nhiều API key, ngăn cách bằng dấu phẩy (bật key rotation).
+    # Với backend local (ollama/vllm) không cần key thật.
     openai_api_keys: str = Field(default="", alias="OPENAI_API_KEYS")
     llm_model: str = Field(default="gpt-4o-mini", alias="LLM_MODEL")
 

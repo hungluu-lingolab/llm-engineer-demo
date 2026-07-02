@@ -14,7 +14,7 @@ dùng RAG.
 | Buổi | Chủ đề | Lắp vào codebase |
 |------|--------|------------------|
 | **1** | LLM APIs Hands-on | `llm/`, `api/`, `prompts/`, `schemas/`, `tools/` — **chatbot chạy được** |
-| 2 | Local LLMs | thêm backend local vào `llm/client.py` |
+| **2** | Local LLMs | `llm/backends.py` + `client.py` đa backend, `Modelfile` — **chạy model local** |
 | 3 | Fine-tuning LoRA/QLoRA | swap model checkpoint |
 | 4 | Embeddings & Vector DB | `retrieval/embeddings.py`, `vectorstore.py` |
 | 5 | RAG Pipeline | `retrieval/chunking.py`, `loader.py`, `retriever.py` → **RAG thật** |
@@ -31,6 +31,63 @@ streaming, structured output, function calling, rate-limit handling.
 `retrieval/retriever.py` hiện là **stub trả về rỗng** → chatbot trả lời chỉ dựa vào
 kiến thức sẵn có của model, **chưa dựa trên tài liệu thật**. Đây là "lỗ hổng RAG" có
 chủ đích, sẽ được lấp ở Buổi 4–5.
+
+### Buổi 2 — Local Serving
+
+Cùng một codebase giờ chạy được với **model local** (Ollama / vLLM) — không đổi
+`completion.py` hay `pipeline.py`, vì Ollama/vLLM đều dùng **OpenAI-compatible API**.
+Chỉ cần đổi backend trong `.env`.
+
+#### Phương án A — Ollama (khuyến nghị cho laptop / GPU yếu / Apple Silicon)
+
+```bash
+# 1. Cài Ollama
+#    macOS:  brew install ollama   (hoặc tải app tại https://ollama.com/download)
+#    Linux:  curl -fsSL https://ollama.ai/install.sh | sh
+#    Windows: tải installer tại https://ollama.com/download
+
+# 2. Khởi động Ollama server (mặc định cổng 11434)
+ollama serve          # để chạy nền; trên macOS app tự chạy sau khi mở
+
+# 3. Pull model (terminal khác)
+ollama pull llama3.2:3b
+
+# 4. (Tùy chọn) Tạo model có sẵn persona pháp lý từ Modelfile
+ollama create legal-assistant -f Modelfile
+
+# 5. Kiểm tra nhanh
+ollama run llama3.2:3b "Xin chào"
+
+# 6. Trỏ app sang Ollama trong .env:
+#    LLM_BACKEND=ollama
+#    LLM_MODEL=llama3.2:3b        # hoặc legal-assistant
+```
+
+#### Phương án B — vLLM (GPU NVIDIA, production / nhiều người dùng)
+
+```bash
+# 1. Cài vLLM (cần GPU NVIDIA + CUDA)
+pip install vllm
+
+# 2. Serve model với OpenAI-compatible API (mặc định cổng 8000)
+vllm serve meta-llama/Llama-3.2-3B-Instruct
+
+# 3. Trỏ app sang vLLM trong .env:
+#    LLM_BACKEND=vllm
+#    LLM_MODEL=meta-llama/Llama-3.2-3B-Instruct
+```
+
+> vLLM chạy trên Linux + GPU NVIDIA. Trên macOS/Windows không có GPU NVIDIA thì
+> dùng Ollama (Phương án A).
+
+Sau khi backend chạy, khởi động app như thường: `uvicorn app.main:app --reload`.
+Giờ mọi request đi tới model local — **không tốn chi phí API, dữ liệu không rời máy**.
+
+| Backend | `LLM_BACKEND` | base_url mặc định | Cần key thật | Yêu cầu |
+|---------|---------------|-------------------|--------------|---------|
+| OpenAI Cloud | `openai` | api.openai.com | ✅ | — |
+| Ollama | `ollama` | localhost:11434/v1 | ❌ | CPU / GPU yếu / Apple Silicon |
+| vLLM | `vllm` | localhost:8000/v1 | ❌ | GPU NVIDIA + CUDA |
 
 ---
 
@@ -83,12 +140,14 @@ pytest          # không gọi API thật (mock LLM), không cần key
 ## Cấu trúc
 
 ```
+Modelfile              # Buổi 2 — Ollama model có sẵn persona pháp lý
 app/
 ├── config.py          # đọc .env (điểm duy nhất chạm secrets)
 ├── main.py            # FastAPI app
 ├── pipeline.py        # orchestrator: retrieve(stub) → prompt → llm
 ├── api/               # FastAPI routes + request/response schemas
-├── llm/               # native OpenAI SDK: completion, streaming, backoff, key rotation
+├── llm/               # native SDK: completion, streaming, backoff, key rotation
+│                      #   + backends.py (Buổi 2: openai/ollama/vllm)
 ├── prompts/           # role prompting, few-shot, chèn context RAG
 ├── schemas/           # Pydantic structured output
 ├── tools/             # function calling
