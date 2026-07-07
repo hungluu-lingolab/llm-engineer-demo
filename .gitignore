@@ -15,6 +15,9 @@ data/legal_docs/*
 !data/legal_docs/.gitkeep
 data/vectorstore/
 
+# Training output (Buổi 3) — checkpoint/adapter nặng, không commit
+training/output/
+
 # OS / IDE
 .DS_Store
 .idea/

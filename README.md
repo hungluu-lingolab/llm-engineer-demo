@@ -15,7 +15,7 @@ dùng RAG.
 |------|--------|------------------|
 | **1** | LLM APIs Hands-on | `llm/`, `api/`, `prompts/`, `schemas/`, `tools/` — **chatbot chạy được** |
 | **2** | Local LLMs | `llm/backends.py` + `client.py` đa backend, `Modelfile` — **chạy model local** |
-| 3 | Fine-tuning LoRA/QLoRA | swap model checkpoint |
+| **3** | Fine-tuning LoRA/QLoRA | `training/` — QLoRA SFT + merge, deploy qua backend Buổi 2 |
 | 4 | Embeddings & Vector DB | `retrieval/embeddings.py`, `vectorstore.py` |
 | 5 | RAG Pipeline | `retrieval/chunking.py`, `loader.py`, `retriever.py` → **RAG thật** |
 | 6 | Agentic RAG | `agent/graph.py` (LangGraph orchestrate, native SDK call) |
@@ -88,6 +88,21 @@ Giờ mọi request đi tới model local — **không tốn chi phí API, dữ 
 | OpenAI Cloud | `openai` | api.openai.com | ✅ | — |
 | Ollama | `ollama` | localhost:11434/v1 | ❌ | CPU / GPU yếu / Apple Silicon |
 | vLLM | `vllm` | localhost:8000/v1 | ❌ | GPU NVIDIA + CUDA |
+
+### Buổi 3 — Fine-tuning (LoRA / QLoRA)
+
+Pipeline **offline** trong `training/` để fine-tune model cho giọng văn pháp lý +
+format trích dẫn điều luật. Sau khi train + merge, model deploy qua **chính backend
+Buổi 2** (Ollama/vLLM) — app không đổi, chỉ đặt lại `LLM_MODEL`.
+
+```bash
+python -m training.prepare_data     # kiểm tra dataset (không cần GPU)
+python -m training.train_qlora      # train QLoRA adapter (cần GPU NVIDIA)
+python -m training.merge_adapter    # merge adapter → model độc lập
+```
+
+> Chi tiết + decision framework (Prompt → RAG → Fine-tune): xem [`training/README.md`](training/README.md).
+> Deps training tách riêng (`training/requirements-train.txt`) vì cần GPU NVIDIA.
 
 ---
 
