@@ -75,7 +75,7 @@ def main() -> None:
         lr_scheduler_type=CONFIG.lr_scheduler_type,
         logging_steps=CONFIG.logging_steps,
         save_strategy="epoch",
-        max_seq_length=CONFIG.max_seq_length,
+        # max_seq_length=CONFIG.max_seq_length,
         dataset_text_field="text",
         packing=CONFIG.packing,
     )
