@@ -36,6 +36,20 @@ class Settings(BaseSettings):
     # ── Resilience ──────────────────────────────────────────────────────────
     llm_max_retries: int = Field(default=5, alias="LLM_MAX_RETRIES")
 
+    # ── Embeddings & Vector Store (Buổi 4) ───────────────────────────────────
+    # OpenAI text-embedding-3-small: 1536 dims, gọi API (dùng chung key với LLM).
+    embedding_model: str = Field(
+        default="text-embedding-3-small", alias="EMBEDDING_MODEL"
+    )
+    embedding_dim: int = Field(default=1536, alias="EMBEDDING_DIM")
+
+    # Qdrant. Mặc định ":memory:" cho demo (không cần Docker). Production: đặt
+    #   QDRANT_URL=http://localhost:6333  và chạy Qdrant qua Docker.
+    qdrant_url: str = Field(default=":memory:", alias="QDRANT_URL")
+    vectorstore_collection: str = Field(
+        default="legal_docs", alias="VECTORSTORE_COLLECTION"
+    )
+
     # ── App ─────────────────────────────────────────────────────────────────
     app_name: str = Field(default="Vietnamese Legal Assistant", alias="APP_NAME")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")

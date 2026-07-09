@@ -16,7 +16,7 @@ dùng RAG.
 | **1** | LLM APIs Hands-on | `llm/`, `api/`, `prompts/`, `schemas/`, `tools/` — **chatbot chạy được** |
 | **2** | Local LLMs | `llm/backends.py` + `client.py` đa backend, `Modelfile` — **chạy model local** |
 | **3** | Fine-tuning LoRA/QLoRA | `training/` — QLoRA SFT + merge, deploy qua backend Buổi 2 |
-| 4 | Embeddings & Vector DB | `retrieval/embeddings.py`, `vectorstore.py` |
+| **4** | Embeddings & Vector DB | `retrieval/embeddings.py` (OpenAI), `vectorstore.py` (Qdrant) — **stub → thật** |
 | 5 | RAG Pipeline | `retrieval/chunking.py`, `loader.py`, `retriever.py` → **RAG thật** |
 | 6 | Agentic RAG | `agent/graph.py` (LangGraph orchestrate, native SDK call) |
 | 7 | Evaluation & Guardrails | `guardrails/`, `eval/` |
@@ -104,6 +104,23 @@ python -m training.merge_adapter    # merge adapter → model độc lập
 > Chi tiết + decision framework (Prompt → RAG → Fine-tune): xem [`training/README.md`](training/README.md).
 > Deps training tách riêng (`training/requirements-train.txt`) vì cần GPU NVIDIA.
 
+### Buổi 4 — Embeddings & Vector Database
+
+Lấp 2 stub retrieval đầu tiên (từ Buổi 1) bằng đồ thật:
+- `retrieval/embeddings.py` → **OpenAI text-embedding-3-small** (1536 dims, gọi API)
+- `retrieval/vectorstore.py` → **Qdrant** (HNSW, cosine; `:memory:` cho demo, server cho prod)
+
+```bash
+python -m scripts.index_demo    # embed vài đoạn luật → index → thử semantic search
+```
+
+> Embedding cần `OPENAI_API_KEYS` (kể cả khi chat chạy local — embedding luôn dùng Cloud).
+> Qdrant mặc định `:memory:` (không cần Docker). Production: chạy Qdrant qua Docker rồi đặt
+> `QDRANT_URL=http://localhost:6333`.
+
+Buổi này mới dựng 2 **khối nền tảng**. `retriever.py` (nối chúng thành RAG hoàn chỉnh)
+vẫn là stub trả `[]` — sẽ lắp ở **Buổi 5**.
+
 ---
 
 ## Cài đặt
@@ -166,7 +183,7 @@ app/
 ├── prompts/           # role prompting, few-shot, chèn context RAG
 ├── schemas/           # Pydantic structured output
 ├── tools/             # function calling
-├── retrieval/         # STUB Buổi 1 → RAG thật từ Buổi 4–5
+├── retrieval/         # embeddings.py + vectorstore.py ✓ Buổi 4 · retriever.py STUB → Buổi 5
 ├── agent/             # STUB → Buổi 6
 ├── guardrails/        # STUB → Buổi 7
 ├── eval/              # STUB → Buổi 7
