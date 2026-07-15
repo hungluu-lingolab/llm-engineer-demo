@@ -17,7 +17,7 @@ dùng RAG.
 | **2** | Local LLMs | `llm/backends.py` + `client.py` đa backend, `Modelfile` — **chạy model local** |
 | **3** | Fine-tuning LoRA/QLoRA | `training/` — QLoRA SFT + merge, deploy qua backend Buổi 2 |
 | **4** | Embeddings & Vector DB | `retrieval/embeddings.py` (OpenAI), `vectorstore.py` (Qdrant) — **stub → thật** |
-| 5 | RAG Pipeline | `retrieval/chunking.py`, `loader.py`, `retriever.py` → **RAG thật** |
+| **5** | RAG Pipeline | `loader`, `chunking`, `retriever` (native) + `ingest.py` → **RAG hoàn chỉnh** |
 | 6 | Agentic RAG | `agent/graph.py` (LangGraph orchestrate, native SDK call) |
 | 7 | Evaluation & Guardrails | `guardrails/`, `eval/` |
 | 8 | Production Optimization | `optimization/` (caching, routing) |
@@ -121,6 +121,40 @@ python -m scripts.index_demo    # embed vài đoạn luật → index → thử 
 Buổi này mới dựng 2 **khối nền tảng**. `retriever.py` (nối chúng thành RAG hoàn chỉnh)
 vẫn là stub trả `[]` — sẽ lắp ở **Buổi 5**.
 
+### Buổi 5 — RAG Pipeline (lấp "lỗ hổng RAG")
+
+**Native SDK, không LangChain.** Lấp 3 stub cuối của retrieval → chatbot trả lời
+dựa trên tài liệu thật:
+- `retrieval/loader.py` → đọc `.txt`/`.md`/`.pdf` (pypdf)
+- `retrieval/chunking.py` → recursive character splitter (tự viết, 512/64)
+- `retrieval/retriever.py` → semantic search + (tùy chọn) query rewriting + re-ranking
+
+```bash
+# 1. Khởi động Qdrant (bắt buộc để ingest và app dùng CHUNG dữ liệu)
+docker compose up -d                # Qdrant ở http://localhost:6333
+#    rồi trong .env:  QDRANT_URL=http://localhost:6333
+
+# 2. Ingest tài liệu vào vector store (load → chunk → embed → index)
+python -m scripts.ingest            # đọc data/legal_docs/ (có sẵn seed .md)
+
+# 3. Chạy app — giờ /chat trả lời DỰA TRÊN tài liệu (RAG thật)
+uvicorn app.main:app --reload
+curl -X POST http://localhost:8000/chat \
+  -H "Content-Type: application/json" \
+  -d '{"question": "Công ty cổ phần cần tối thiểu mấy cổ đông?"}'
+```
+
+**Điểm mấu chốt:** `pipeline.py` không đổi một dòng — nó đã gọi `retrieve()` từ Buổi 1.
+Giờ `retrieve()` trả chunk thật thay vì `[]` → toàn bộ chuỗi tự thành RAG.
+
+Tính năng nâng cao bật qua `.env` (mặc định tắt để chạy nhẹ):
+- `RAG_QUERY_REWRITING=true` — LLM viết lại câu hỏi trước khi search.
+- `RAG_RERANK_ENABLED=true` — cross-encoder lọc lại (cần `pip install sentence-transformers`).
+
+> **Vì sao cần Qdrant server (không dùng `:memory:`)?** `ingest` và `uvicorn` là hai
+> tiến trình khác nhau. `:memory:` chạy in-process nên dữ liệu ingest sẽ KHÔNG thấy được
+> từ app → `/chat` vẫn rỗng. Qdrant server (docker compose) là kho chung cho cả hai.
+
 ---
 
 ## Cài đặt
@@ -183,7 +217,7 @@ app/
 ├── prompts/           # role prompting, few-shot, chèn context RAG
 ├── schemas/           # Pydantic structured output
 ├── tools/             # function calling
-├── retrieval/         # embeddings.py + vectorstore.py ✓ Buổi 4 · retriever.py STUB → Buổi 5
+├── retrieval/         # ✓ RAG hoàn chỉnh: loader, chunking, embeddings, vectorstore, retriever, rerank
 ├── agent/             # STUB → Buổi 6
 ├── guardrails/        # STUB → Buổi 7
 ├── eval/              # STUB → Buổi 7

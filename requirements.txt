@@ -11,6 +11,11 @@ httpx>=0.27.0
 # Embedding dùng OpenAI (openai đã có ở trên). Vector store: Qdrant.
 qdrant-client>=1.9.0            # vector store (HNSW, cosine; ":memory:" hoặc server)
 
+# ─── Buổi 5: RAG Pipeline ────────────────────────────────────────────────────
+pypdf>=4.2.0                    # đọc PDF (native, thay LangChain loader)
+# Re-ranking (OPTIONAL — chỉ cần khi RAG_RERANK_ENABLED=true):
+#   sentence-transformers>=3.0.0   # cross-encoder re-ranker
+
 # ─── Dev / test ──────────────────────────────────────────────────────────────
 pytest>=8.2.0
 pytest-asyncio>=0.23.0

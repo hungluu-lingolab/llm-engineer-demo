@@ -1,6 +1,7 @@
-"""Test Buổi 1 — không gọi API thật (mock LLM) nên chạy được không cần key.
+"""Test chat endpoint + pipeline wiring — mock LLM & retrieval, không gọi API thật.
 
-Mục tiêu: kiểm tra wiring của pipeline + API layer, và xác nhận retriever là stub.
+Lưu ý: từ Buổi 5, pipeline.answer() gọi retrieve() (RAG thật) trước khi chat, nên
+phải mock CẢ retrieve lẫn chat để test không chạm OpenAI/Qdrant.
 """
 
 from __future__ import annotations
@@ -8,7 +9,6 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.retrieval.retriever import retrieve
 
 client = TestClient(app)
 
@@ -22,15 +22,11 @@ def test_health_ok():
     assert "model" in body
 
 
-def test_retriever_is_stub_in_lesson1():
-    """Điểm sư phạm Buổi 1: retriever luôn trả rỗng (chưa có RAG)."""
-    assert retrieve("Công ty TNHH có tối đa bao nhiêu thành viên?") == []
-
-
 def test_chat_endpoint_wiring(monkeypatch):
-    """Endpoint /chat gọi đúng pipeline. Mock LLM để không tốn API."""
+    """Endpoint /chat gọi đúng pipeline. Mock retrieve + LLM để không tốn API."""
     from app import pipeline
 
+    monkeypatch.setattr(pipeline, "retrieve", lambda question: [])
     monkeypatch.setattr(pipeline.completion, "chat", lambda messages, params: "Trả lời demo.")
 
     r = client.post("/chat", json={"question": "Xin chào"})

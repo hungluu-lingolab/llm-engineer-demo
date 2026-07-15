@@ -50,6 +50,24 @@ class Settings(BaseSettings):
         default="legal_docs", alias="VECTORSTORE_COLLECTION"
     )
 
+    # ── RAG Pipeline (Buổi 5) ────────────────────────────────────────────────
+    rag_source_dir: str = Field(default="./data/legal_docs", alias="RAG_SOURCE_DIR")
+    rag_chunk_size: int = Field(default=512, alias="RAG_CHUNK_SIZE")
+    rag_chunk_overlap: int = Field(default=64, alias="RAG_CHUNK_OVERLAP")
+    # Contextual Retrieval: prepend heading path vào chunk markdown (cải thiện retrieval).
+    rag_contextual_chunking: bool = Field(default=True, alias="RAG_CONTEXTUAL_CHUNKING")
+    rag_top_k: int = Field(default=5, alias="RAG_TOP_K")
+
+    # Query rewriting: LLM viết lại câu hỏi trước khi search (cải thiện recall).
+    rag_query_rewriting: bool = Field(default=False, alias="RAG_QUERY_REWRITING")
+
+    # Re-ranking: cross-encoder lọc lại sau retrieve (cần sentence-transformers).
+    rag_rerank_enabled: bool = Field(default=False, alias="RAG_RERANK_ENABLED")
+    rag_fetch_k: int = Field(default=20, alias="RAG_FETCH_K")  # lấy rộng trước khi rerank
+    rerank_model: str = Field(
+        default="cross-encoder/ms-marco-MiniLM-L-6-v2", alias="RERANK_MODEL"
+    )
+
     # ── App ─────────────────────────────────────────────────────────────────
     app_name: str = Field(default="Vietnamese Legal Assistant", alias="APP_NAME")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")

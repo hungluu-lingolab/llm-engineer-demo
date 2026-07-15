@@ -32,8 +32,10 @@ def build_messages(
     system_content = LEGAL_SYSTEM_PROMPT
 
     if context_chunks:
+        # Hiển thị source (từ Buổi 5 chunk có metadata thật) để model trích dẫn đúng nguồn.
         context_block = "\n\n".join(
-            f"[Nguồn {i + 1}] {c.text}" for i, c in enumerate(context_chunks)
+            f"[Nguồn {i + 1}: {c.source or 'tài liệu'}] {c.text}"
+            for i, c in enumerate(context_chunks)
         )
         system_content += f"\n\n--- TÀI LIỆU THAM KHẢO ---\n{context_block}"
 

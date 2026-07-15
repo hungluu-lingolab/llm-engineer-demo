@@ -10,10 +10,13 @@ __pycache__/
 .venv/
 venv/
 
-# Data (tài liệu nguồn, vector store — sẽ xuất hiện từ Buổi 5)
+# Data: tài liệu nguồn học viên tự bỏ vào (PDF...) không commit,
+# nhưng GIỮ seed .md demo của Buổi 5.
 data/legal_docs/*
 !data/legal_docs/.gitkeep
+!data/legal_docs/*.md
 data/vectorstore/
+data/qdrant/        # Qdrant storage (docker compose)
 
 # Training output (Buổi 3) — checkpoint/adapter nặng, không commit
 training/output/
