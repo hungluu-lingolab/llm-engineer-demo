@@ -10,9 +10,10 @@ LangGraph chỉ lo control flow (node nào chạy sau node nào), không gọi L
 
 from __future__ import annotations
 
+from langgraph.types import Send
 from pydantic import BaseModel, Field
 
-from app.agent.state import GradedChunk, GraphState
+from app.agent.state import GradedChunk, GraphState, RetrieveTask
 from app.agent.tools_web import web_search
 from app.config import settings
 from app.llm import completion
@@ -56,18 +57,49 @@ def decompose_query(state: GraphState) -> dict:
     return {"sub_questions": sub_qs}
 
 
-# ── Retrieve (multi-hop nếu có nhiều sub-question) ───────────────────────────
+# ── Retrieve song song theo sub-question (LangGraph Send API) ───────────────
+#
+# Fan-out: send_retrieve là một CONDITIONAL EDGE (không phải node) — trả về list
+# Send(...), mỗi phần tử là một "task" gọi node parallel_retrieve với state RIÊNG
+# {"sub_question": sq}. LangGraph chạy các task này song song, mỗi task chỉ thấy
+# đúng payload của Send, không thấy toàn bộ GraphState.
+#
+# Fan-in: mọi nhánh song song đều trả {"raw_documents": [...]}. Vì
+# GraphState.raw_documents khai báo Annotated[list, operator.add] (xem state.py),
+# LangGraph NỐI list của các nhánh lại (a + b + c) khi hội tụ — không ghi đè. Nếu
+# thiếu reducer này, chỉ nhánh "thắng" cuối cùng còn lại → mất dữ liệu, đây là lỗi
+# phổ biến nhất khi mới dùng Send.
+#
+# dedupe_documents chạy SAU khi hội tụ, đọc `raw_documents` (đã gộp bởi reducer)
+# và ghi ra `documents` (field KHÔNG có reducer, ghi đè bình thường). Bắt buộc phải
+# tách 2 field: nếu dedupe ghi thẳng vào `documents` mà field đó cũng có reducer
+# operator.add, kết quả đã dedupe sẽ bị CỘNG THÊM vào list cũ mỗi lần chạy → nhân
+# bản dữ liệu, thay vì thay thế.
 
-def retrieve_node(state: GraphState) -> dict:
-    """Retrieve cho từng sub-question rồi gộp + khử trùng (giữ thứ tự, ưu tiên score cao)."""
+def send_retrieve(state: GraphState) -> list[Send]:
+    """Router cho add_conditional_edges: sinh 1 Send task cho mỗi sub-question."""
     sub_questions = state.get("sub_questions") or [state["question"]]
+    return [
+        Send("parallel_retrieve", RetrieveTask(sub_question=sq)) for sq in sub_questions
+    ]
 
+
+def parallel_retrieve(state: GraphState) -> dict:
+    """Chạy trong một nhánh Send — state ở đây CHỈ có field `sub_question`."""
+    sub_question = state.get("sub_question", "")
+    return {"raw_documents": retrieve(sub_question)}
+
+
+def dedupe_documents(state: GraphState) -> dict:
+    """Sau khi các nhánh song song hội tụ: khử trùng theo text, giữ bản score cao nhất.
+
+    Đọc từ `raw_documents` (đã gộp qua reducer), GHI RA `documents` (không reducer).
+    """
     seen: dict[str, RetrievedChunk] = {}
-    for sub_q in sub_questions:
-        for chunk in retrieve(sub_q):
-            existing = seen.get(chunk.text)
-            if existing is None or chunk.score > existing.score:
-                seen[chunk.text] = chunk
+    for chunk in state.get("raw_documents", []):
+        existing = seen.get(chunk.text)
+        if existing is None or chunk.score > existing.score:
+            seen[chunk.text] = chunk
 
     documents = sorted(seen.values(), key=lambda c: c.score, reverse=True)
     return {"documents": documents}

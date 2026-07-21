@@ -40,23 +40,57 @@ def test_decompose_long_question_calls_llm(monkeypatch):
     assert out["sub_questions"] == ["câu 1", "câu 2"]   # cắt còn max=2
 
 
-# ── retrieve_node (multi-hop merge + dedupe) ─────────────────────────────────
+# ── send_retrieve / parallel_retrieve / dedupe_documents (Send API) ──────────
 
-def test_retrieve_node_merges_and_dedupes(monkeypatch):
+def test_send_retrieve_creates_one_send_per_sub_question():
+    """send_retrieve (router) sinh đúng 1 Send task cho mỗi sub-question."""
+    from langgraph.types import Send
+
+    sends = nodes.send_retrieve({"sub_questions": ["sub1", "sub2", "sub3"]})
+    assert len(sends) == 3
+    assert all(isinstance(s, Send) for s in sends)
+    assert [s.arg["sub_question"] for s in sends] == ["sub1", "sub2", "sub3"]
+
+
+def test_send_retrieve_falls_back_to_question_when_no_sub_questions():
+    sends = nodes.send_retrieve({"question": "câu hỏi gốc"})
+    assert len(sends) == 1
+    assert sends[0].arg["sub_question"] == "câu hỏi gốc"
+
+
+def test_parallel_retrieve_writes_raw_documents(monkeypatch):
+    """Mỗi nhánh Send chỉ thấy `sub_question` riêng, ghi ra `raw_documents` (không phải `documents`)."""
+    c = RetrievedChunk(text="Điều 46 ...", source="a.md", score=0.5)
+    monkeypatch.setattr(nodes, "retrieve", lambda q, top_k=None: [c] if q == "sub1" else [])
+
+    out = nodes.parallel_retrieve({"sub_question": "sub1"})
+    assert out == {"raw_documents": [c]}
+
+
+def test_dedupe_documents_merges_and_dedupes():
+    """dedupe_documents đọc `raw_documents` (đã gộp qua reducer), ghi ra `documents` (không reducer)."""
     c1 = RetrievedChunk(text="Điều 46 ...", source="a.md", score=0.5)
     c2 = RetrievedChunk(text="Điều 46 ...", source="a.md", score=0.9)  # trùng text, score cao hơn
     c3 = RetrievedChunk(text="Điều 111 ...", source="b.md", score=0.7)
 
-    def fake_retrieve(query, top_k=None):
-        return [c1] if query == "sub1" else [c2, c3]
-
-    monkeypatch.setattr(nodes, "retrieve", fake_retrieve)
-
-    out = nodes.retrieve_node({"sub_questions": ["sub1", "sub2"]})
+    # raw_documents mô phỏng kết quả ĐÃ GỘP bởi reducer operator.add từ nhiều nhánh Send.
+    out = nodes.dedupe_documents({"raw_documents": [c1, c3, c2]})
     docs = out["documents"]
     assert len(docs) == 2                      # đã dedupe theo text
     assert docs[0].score == 0.9                # giữ bản score cao hơn, sắp giảm dần
     assert docs[0].text == "Điều 46 ..."
+
+
+def test_dedupe_documents_does_not_accumulate_across_calls():
+    """Bug đã sửa: dedupe_documents phải GHI ĐÈ `documents`, không cộng dồn qua nhiều lần gọi.
+
+    (Trước khi sửa, `documents` có reducer operator.add nên gọi dedupe nhiều lần
+    trong một fan-in sẽ nhân bản dữ liệu — xem ghi chú trong state.py.)
+    """
+    c1 = RetrievedChunk(text="A", source="a.md", score=0.5)
+    out1 = nodes.dedupe_documents({"raw_documents": [c1]})
+    out2 = nodes.dedupe_documents({"raw_documents": [c1]})
+    assert out1 == out2 == {"documents": [c1]}   # không tích luỹ giữa 2 lần gọi độc lập
 
 
 # ── grade_documents + router ─────────────────────────────────────────────────
@@ -138,4 +172,39 @@ def test_full_graph_routes_to_web_search_when_no_relevant_docs(monkeypatch):
 
     assert result["web_search_used"] is True
     assert result["generation"] == "Câu trả lời từ web."
+    graph_mod._build_graph.cache_clear()
+
+
+def test_full_graph_parallel_retrieve_no_loss_no_duplication(monkeypatch):
+    """End-to-end: 3 sub-questions chạy song song qua Send — mỗi chunk phải xuất hiện
+    ĐÚNG MỘT LẦN trong kết quả cuối (guard chống regression bug nhân bản/mất dữ liệu)."""
+    from app.agent import graph as graph_mod
+
+    graph_mod._build_graph.cache_clear()
+    monkeypatch.setattr(nodes.settings, "agent_decompose_min_chars", 5)
+
+    by_sub_question = {
+        "sub A": [RetrievedChunk(text="Chunk A", source="a.md", score=0.9)],
+        "sub B": [RetrievedChunk(text="Chunk B", source="b.md", score=0.8)],
+        "sub C": [RetrievedChunk(text="Chunk C", source="c.md", score=0.7)],
+    }
+    monkeypatch.setattr(nodes, "retrieve", lambda q, top_k=None: by_sub_question.get(q, []))
+
+    class FakeSubQuestions:
+        sub_questions = ["sub A", "sub B", "sub C"]
+
+    class FakeGrade:
+        relevant = True
+        reason = "ok"
+
+    def fake_chat_parsed(messages, schema, params=None):
+        return FakeSubQuestions() if schema is nodes._SubQuestions else FakeGrade()
+
+    monkeypatch.setattr(nodes.completion, "chat_parsed", fake_chat_parsed)
+    monkeypatch.setattr(nodes.completion, "chat", lambda messages, params: "OK")
+
+    result = graph_mod.run_agent("câu hỏi dài đủ mọi thứ")
+
+    texts = sorted(d.text for d in result["documents"])
+    assert texts == ["Chunk A", "Chunk B", "Chunk C"]   # đúng 1 lần mỗi chunk
     graph_mod._build_graph.cache_clear()

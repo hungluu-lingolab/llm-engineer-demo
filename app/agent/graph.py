@@ -3,9 +3,13 @@
 LangGraph CHỈ orchestrate control flow. Mọi lời gọi thực tế (LLM, retriever, web
 search) đều xuyên qua native SDK đã xây ở app/llm, app/retrieval, app/agent/tools_web.
 
-Luồng:
-    decompose_query → retrieve → grade_documents ─┬─(đủ relevant)→ generate → END
-                                                    └─(thiếu)→ web_search → generate → END
+Luồng (retrieve chạy SONG SONG cho từng sub-question qua LangGraph Send API):
+    decompose_query
+        → send_retrieve (router: fan-out 1 Send/sub-question)
+        → parallel_retrieve (N nhánh chạy song song)
+        → dedupe_documents (fan-in: gộp + khử trùng sau khi hội tụ)
+        → grade_documents ─┬─(đủ relevant)→ generate → END
+                            └─(thiếu)→ web_search → generate → END
 
 So với RAG cố định (Buổi 5): thêm khả năng "quyết định" — có chunk đủ tốt không,
 nếu không thì tự tìm thêm trên web trước khi generate.
@@ -17,10 +21,12 @@ from functools import lru_cache
 
 from app.agent.nodes import (
     decompose_query,
+    dedupe_documents,
     generate,
     grade_documents,
-    retrieve_node,
+    parallel_retrieve,
     route_after_grading,
+    send_retrieve,
     web_search_node,
 )
 from app.agent.state import GraphState
@@ -33,14 +39,19 @@ def _build_graph():
     workflow = StateGraph(GraphState)
 
     workflow.add_node("decompose", decompose_query)
-    workflow.add_node("retrieve", retrieve_node)
+    workflow.add_node("parallel_retrieve", parallel_retrieve)
+    workflow.add_node("dedupe", dedupe_documents)
     workflow.add_node("grade", grade_documents)
     workflow.add_node("web_search", web_search_node)
     workflow.add_node("generate", generate)
 
     workflow.set_entry_point("decompose")
-    workflow.add_edge("decompose", "retrieve")
-    workflow.add_edge("retrieve", "grade")
+    # Conditional edge với router trả về list[Send]: LangGraph fan-out sang
+    # node "parallel_retrieve" một lần cho mỗi Send, chạy song song.
+    workflow.add_conditional_edges("decompose", send_retrieve, ["parallel_retrieve"])
+    # Mọi nhánh song song hội tụ về "dedupe" (fan-in) trước khi grade.
+    workflow.add_edge("parallel_retrieve", "dedupe")
+    workflow.add_edge("dedupe", "grade")
     workflow.add_conditional_edges(
         "grade",
         route_after_grading,
