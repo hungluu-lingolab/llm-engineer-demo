@@ -9,7 +9,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from app.api.schemas import ChatRequest, ChatResponse
+from app.api.schemas import AgentChatResponse, AgentSource, ChatRequest, ChatResponse
 from app.llm.params import GenerationParams
 from app.pipeline import answer, answer_stream, answer_structured
 from app.schemas.domain import LegalAnswer
@@ -45,3 +45,24 @@ def chat_stream_endpoint(req: ChatRequest) -> StreamingResponse:
 def chat_structured_endpoint(req: ChatRequest) -> LegalAnswer:
     """Trả lời structured output theo schema LegalAnswer (Section 4)."""
     return answer_structured(req.question, _params_from(req))
+
+
+@router.post("/agent", response_model=AgentChatResponse)
+def chat_agent_endpoint(req: ChatRequest) -> AgentChatResponse:
+    """Agentic RAG / CRAG (Buổi 6): retrieve → grade → web fallback nếu cần → generate.
+
+    Trả thêm sources + web_search_used để thấy được "vì sao model trả lời vậy" —
+    khác /chat thường vốn chỉ trả text.
+    """
+    from app.agent.graph import run_agent
+
+    state = run_agent(req.question)
+    documents = state.get("documents", [])
+    return AgentChatResponse(
+        answer=state.get("generation", ""),
+        sources=[
+            AgentSource(text=d.text, source=d.source, score=d.score) for d in documents
+        ],
+        web_search_used=state.get("web_search_used", False),
+        sub_questions=state.get("sub_questions", []),
+    )

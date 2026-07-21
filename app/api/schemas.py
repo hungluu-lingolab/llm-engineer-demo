@@ -21,3 +21,18 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
     model: str = Field(default_factory=lambda: settings.llm_model)
+
+
+class AgentSource(BaseModel):
+    text: str
+    source: str
+    score: float
+
+
+class AgentChatResponse(BaseModel):
+    """Response cho /chat/agent — trả thêm bằng chứng để thấy 'vì sao trả lời vậy'."""
+
+    answer: str
+    sources: list[AgentSource]
+    web_search_used: bool
+    sub_questions: list[str]

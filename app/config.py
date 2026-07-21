@@ -68,6 +68,15 @@ class Settings(BaseSettings):
         default="cross-encoder/ms-marco-MiniLM-L-6-v2", alias="RERANK_MODEL"
     )
 
+    # ── Agentic RAG / CRAG (Buổi 6) ──────────────────────────────────────────
+    tavily_api_key: str = Field(default="", alias="TAVILY_API_KEY")
+    # Query decomposition: chỉ decompose câu hỏi đủ dài/phức tạp (heuristic đơn giản).
+    agent_decompose_min_chars: int = Field(default=80, alias="AGENT_DECOMPOSE_MIN_CHARS")
+    agent_max_sub_questions: int = Field(default=4, alias="AGENT_MAX_SUB_QUESTIONS")
+    # Số chunk "relevant" tối thiểu để KHÔNG cần web search fallback.
+    agent_min_relevant_chunks: int = Field(default=1, alias="AGENT_MIN_RELEVANT_CHUNKS")
+    agent_web_search_results: int = Field(default=3, alias="AGENT_WEB_SEARCH_RESULTS")
+
     # ── App ─────────────────────────────────────────────────────────────────
     app_name: str = Field(default="Vietnamese Legal Assistant", alias="APP_NAME")
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")

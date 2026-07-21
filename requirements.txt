@@ -16,16 +16,15 @@ pypdf>=4.2.0                    # đọc PDF (native, thay LangChain loader)
 # Re-ranking (OPTIONAL — chỉ cần khi RAG_RERANK_ENABLED=true):
 #   sentence-transformers>=3.0.0   # cross-encoder re-ranker
 
+# ─── Buổi 6: Agentic RAG (CRAG + Query Decomposition) ────────────────────────
+langgraph>=0.2.0                 # CHỈ orchestrate control flow; mọi call vẫn native SDK
+tavily-python>=0.5.0             # web search fallback (native, không qua LangChain)
+
 # ─── Dev / test ──────────────────────────────────────────────────────────────
 pytest>=8.2.0
 pytest-asyncio>=0.23.0
 
 # ─── Các buổi sau sẽ bổ sung (giữ comment để thấy lộ trình) ───────────────────
-# Buổi 5 (RAG Pipeline):
-#   pypdf>=4.2.0              # document loader
-#   langchain-text-splitters # chunking (hoặc tự viết)
-# Buổi 6 (Agentic RAG):
-#   langgraph>=0.1.0          # chỉ dùng để orchestrate; vẫn gọi native SDK
 # Buổi 7 (Evaluation & Guardrails):
 #   rouge-score, bert-score, nltk
 # Buổi 9 (Capstone):

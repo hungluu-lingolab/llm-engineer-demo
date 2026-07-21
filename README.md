@@ -18,7 +18,7 @@ dùng RAG.
 | **3** | Fine-tuning LoRA/QLoRA | `training/` — QLoRA SFT + merge, deploy qua backend Buổi 2 |
 | **4** | Embeddings & Vector DB | `retrieval/embeddings.py` (OpenAI), `vectorstore.py` (Qdrant) — **stub → thật** |
 | **5** | RAG Pipeline | `loader`, `chunking`, `retriever` (native) + `ingest.py` → **RAG hoàn chỉnh** |
-| 6 | Agentic RAG | `agent/graph.py` (LangGraph orchestrate, native SDK call) |
+| **6** | Agentic RAG | `agent/` — CRAG + Query Decomposition (LangGraph, mọi call native) |
 | 7 | Evaluation & Guardrails | `guardrails/`, `eval/` |
 | 8 | Production Optimization | `optimization/` (caching, routing) |
 | 9 | Capstone | Gradio UI + deploy HF Spaces |
@@ -155,6 +155,36 @@ Tính năng nâng cao bật qua `.env` (mặc định tắt để chạy nhẹ):
 > tiến trình khác nhau. `:memory:` chạy in-process nên dữ liệu ingest sẽ KHÔNG thấy được
 > từ app → `/chat` vẫn rỗng. Qdrant server (docker compose) là kho chung cho cả hai.
 
+### Buổi 6 — Agentic RAG (CRAG + Query Decomposition)
+
+RAG ở Buổi 5 là pipeline **cố định**: luôn retrieve → generate, không kiểm tra chất
+lượng. Buổi này thêm khả năng **quyết định**, dùng **LangGraph** để orchestrate —
+nhưng mọi lời gọi thực tế (LLM, retriever, web search) vẫn xuyên qua native SDK đã
+xây từ các buổi trước. LangGraph chỉ lo state machine, không dùng LangChain chain nào.
+
+```
+question → decompose (nếu câu hỏi dài/phức tạp) → retrieve (multi-hop, dedupe)
+         → grade từng chunk (structured output) → đủ relevant?
+             ├─ Có → generate
+             └─ Không → web_search (Tavily) → generate
+```
+
+```bash
+curl -X POST http://localhost:8000/chat/agent \
+  -H "Content-Type: application/json" \
+  -d '{"question": "So sánh điều kiện thành lập công ty TNHH và công ty cổ phần theo luật 2020"}'
+```
+
+Response trả thêm `sources`, `web_search_used`, `sub_questions` — để **thấy được**
+model đã dùng chunk nào, có phải fallback web không, câu hỏi bị chia thành gì.
+
+> Cần `TAVILY_API_KEY` cho web search fallback (free tier tại tavily.com). Nếu câu
+> hỏi luôn tìm được chunk relevant trong Qdrant, fallback không bao giờ kích hoạt.
+
+**Mọi node đều tái dùng code cũ:** `decompose`/`grade`/`generate` gọi
+`completion.chat_parsed`/`chat` (Buổi 1), `retrieve_node` gọi `retriever.retrieve`
+(Buổi 5). File mới duy nhất là `agent/tools_web.py` (Tavily) và phần orchestration.
+
 ---
 
 ## Cài đặt
@@ -218,7 +248,7 @@ app/
 ├── schemas/           # Pydantic structured output
 ├── tools/             # function calling
 ├── retrieval/         # ✓ RAG hoàn chỉnh: loader, chunking, embeddings, vectorstore, retriever, rerank
-├── agent/             # STUB → Buổi 6
+├── agent/             # ✓ CRAG + Query Decomposition: graph.py (LangGraph), nodes.py, tools_web.py (Tavily)
 ├── guardrails/        # STUB → Buổi 7
 ├── eval/              # STUB → Buổi 7
 └── optimization/      # STUB → Buổi 8
