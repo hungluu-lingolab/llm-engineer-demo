@@ -2,6 +2,9 @@
 
 Mock `_llm_with_tools()` — LangGraph (graph, ToolNode, checkpointer, interrupt)
 chạy THẬT để verify control flow: agent → tools (chờ duyệt) → tools chạy → agent → END.
+
+Bài 4: agent_node/_llm_with_tools/start_conversation/resume_conversation đều
+async (agent_node await MCP client) — FakeLLM dùng `ainvoke`, test dùng `async def`.
 """
 
 from __future__ import annotations
@@ -59,34 +62,40 @@ def test_detect_repetition_false_when_not_enough_history():
 
 # ── agent_node ────────────────────────────────────────────────────────────────
 
-def test_agent_node_calls_llm_and_appends_message(monkeypatch):
+async def test_agent_node_calls_llm_and_appends_message(monkeypatch):
     fake_response = _ai_message_text("Chào bạn!")
 
     class FakeLLM:
-        def invoke(self, messages):
+        async def ainvoke(self, messages):
             return fake_response
 
-    monkeypatch.setattr(nodes, "_llm_with_tools", lambda: FakeLLM())
+    async def fake_llm_with_tools(query=""):
+        return FakeLLM()
 
-    out = nodes.agent_node({"messages": [{"role": "user", "content": "Xin chào"}]})
+    monkeypatch.setattr(nodes, "_llm_with_tools", fake_llm_with_tools)
+
+    out = await nodes.agent_node({"messages": [{"role": "user", "content": "Xin chào"}]})
     assert out == {"messages": [fake_response]}
 
 
 # ── Full graph: ReAct loop with HITL interrupt ───────────────────────────────
 
-def test_full_graph_stops_before_tool_call_pending_approval(monkeypatch):
+async def test_full_graph_stops_before_tool_call_pending_approval(monkeypatch):
     """Agent muốn gọi tool → graph phải DỪNG trước tool node (interrupt_before)."""
     graph_mod._build_graph.cache_clear()
 
     call = _ai_message_with_tool_call("send_reminder", {"message": "Họp", "time": "15:00"})
 
     class FakeLLM:
-        def invoke(self, messages):
+        async def ainvoke(self, messages):
             return call
 
-    monkeypatch.setattr(nodes, "_llm_with_tools", lambda: FakeLLM())
+    async def fake_llm_with_tools(query=""):
+        return FakeLLM()
 
-    result = graph_mod.start_conversation("thread-1", "Nhắc tôi họp lúc 15h")
+    monkeypatch.setattr(nodes, "_llm_with_tools", fake_llm_with_tools)
+
+    result = await graph_mod.start_conversation("thread-1", "Nhắc tôi họp lúc 15h")
 
     assert result["status"] == "pending_approval"
     assert result["tool_call"]["name"] == "send_reminder"
@@ -94,7 +103,7 @@ def test_full_graph_stops_before_tool_call_pending_approval(monkeypatch):
     graph_mod._build_graph.cache_clear()
 
 
-def test_full_graph_resumes_and_runs_tool_after_approval(monkeypatch):
+async def test_full_graph_resumes_and_runs_tool_after_approval(monkeypatch):
     """Sau khi duyệt (approve=True), graph chạy tiếp: tool thực thi → agent trả lời."""
     graph_mod._build_graph.cache_clear()
 
@@ -102,21 +111,24 @@ def test_full_graph_resumes_and_runs_tool_after_approval(monkeypatch):
     responses = iter([call, _ai_message_text("Chiều nay bạn có 2 cuộc họp.")])
 
     class FakeLLM:
-        def invoke(self, messages):
+        async def ainvoke(self, messages):
             return next(responses)
 
-    monkeypatch.setattr(nodes, "_llm_with_tools", lambda: FakeLLM())
+    async def fake_llm_with_tools(query=""):
+        return FakeLLM()
 
-    pending = graph_mod.start_conversation("thread-2", "Chiều nay tôi có lịch gì?")
+    monkeypatch.setattr(nodes, "_llm_with_tools", fake_llm_with_tools)
+
+    pending = await graph_mod.start_conversation("thread-2", "Chiều nay tôi có lịch gì?")
     assert pending["status"] == "pending_approval"
 
-    result = graph_mod.resume_conversation("thread-2", approve=True)
+    result = await graph_mod.resume_conversation("thread-2", approve=True)
     assert result["status"] == "done"
     assert result["answer"] == "Chiều nay bạn có 2 cuộc họp."
     graph_mod._build_graph.cache_clear()
 
 
-def test_full_graph_rejection_injects_tool_message_instead_of_running(monkeypatch):
+async def test_full_graph_rejection_injects_tool_message_instead_of_running(monkeypatch):
     """Từ chối (approve=False) → tool KHÔNG chạy thật, agent thấy lý do từ chối."""
     graph_mod._build_graph.cache_clear()
 
@@ -126,16 +138,19 @@ def test_full_graph_rejection_injects_tool_message_instead_of_running(monkeypatc
     seen_messages = []
 
     class FakeLLM:
-        def invoke(self, messages):
+        async def ainvoke(self, messages):
             seen_messages.append(messages)
             return next(responses)
 
-    monkeypatch.setattr(nodes, "_llm_with_tools", lambda: FakeLLM())
+    async def fake_llm_with_tools(query=""):
+        return FakeLLM()
 
-    pending = graph_mod.start_conversation("thread-3", "Nhắc tôi gọi khách lúc 16h")
+    monkeypatch.setattr(nodes, "_llm_with_tools", fake_llm_with_tools)
+
+    pending = await graph_mod.start_conversation("thread-3", "Nhắc tôi gọi khách lúc 16h")
     assert pending["status"] == "pending_approval"
 
-    result = graph_mod.resume_conversation("thread-3", approve=False, rejection_note="chưa cần")
+    result = await graph_mod.resume_conversation("thread-3", approve=False, rejection_note="chưa cần")
     assert result["status"] == "done"
     assert result["answer"] == "Đã huỷ lời nhắc theo yêu cầu."
 
@@ -145,7 +160,7 @@ def test_full_graph_rejection_injects_tool_message_instead_of_running(monkeypatc
     graph_mod._build_graph.cache_clear()
 
 
-def test_memory_persists_across_turns_same_thread(monkeypatch):
+async def test_memory_persists_across_turns_same_thread(monkeypatch):
     """Checkpointer (Section 5): 2 lượt invoke cùng thread_id → agent thấy lịch sử cũ."""
     graph_mod._build_graph.cache_clear()
 
@@ -153,14 +168,17 @@ def test_memory_persists_across_turns_same_thread(monkeypatch):
     responses = iter([_ai_message_text("Chào Minh!"), _ai_message_text("Bạn tên Minh.")])
 
     class FakeLLM:
-        def invoke(self, messages):
+        async def ainvoke(self, messages):
             seen_message_counts.append(len(messages))
             return next(responses)
 
-    monkeypatch.setattr(nodes, "_llm_with_tools", lambda: FakeLLM())
+    async def fake_llm_with_tools(query=""):
+        return FakeLLM()
 
-    graph_mod.start_conversation("thread-4", "Tôi tên Minh.")
-    graph_mod.start_conversation("thread-4", "Tôi tên gì?")
+    monkeypatch.setattr(nodes, "_llm_with_tools", fake_llm_with_tools)
+
+    await graph_mod.start_conversation("thread-4", "Tôi tên Minh.")
+    await graph_mod.start_conversation("thread-4", "Tôi tên gì?")
 
     # Lượt 2 phải thấy nhiều message hơn lượt 1 (system + lịch sử cũ + câu mới).
     assert seen_message_counts[1] > seen_message_counts[0]

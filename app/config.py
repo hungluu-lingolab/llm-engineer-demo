@@ -93,6 +93,11 @@ class Settings(BaseSettings):
         default=2000, alias="AGENT_CONTEXT_WINDOW_TOKENS"
     )
 
+    # ── Module II, Bài 4: Agentic Tool Design & Integration ──────────────────
+    # Số tool tối đa model được THẤY mỗi lượt (Section 2: Tool Retrieval).
+    # 15 tool tổng (tools.py) > ngưỡng chính xác ổn định (5-7) của bài học.
+    agent_tool_retrieval_k: int = Field(default=5, alias="AGENT_TOOL_RETRIEVAL_K")
+
     # ── Guardrails & Evaluation (Buổi 7) ─────────────────────────────────────
     # Prompt injection: bật thêm LLM-based check ngoài regex (tốn 1 lời gọi LLM).
     guardrails_llm_injection_check: bool = Field(

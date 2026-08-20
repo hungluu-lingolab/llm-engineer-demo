@@ -81,3 +81,39 @@ class AssistantResponse(BaseModel):
     status: str
     answer: str | None = None
     tool_call: PendingToolCall | None = None
+
+
+class AssistantEvaluateRequest(BaseModel):
+    """Bài 5 — chấm điểm lượt hội thoại mới nhất của 1 thread (task success + trajectory)."""
+
+    thread_id: str = Field(min_length=1)
+
+
+class TaskSuccessSchema(BaseModel):
+    success: bool
+    score: float
+    reasoning: str
+
+
+class TrajectoryStep(BaseModel):
+    tool: str
+    args: dict
+    observation: str
+
+
+class TrajectorySchema(BaseModel):
+    efficiency: int
+    logical_order: int
+    tool_correctness: int
+    recovery: int
+    overall: float
+    issues: list[str]
+
+
+class AssistantEvaluateResponse(BaseModel):
+    """error != None khi chưa có gì để chấm (chưa chat, hoặc đang chờ duyệt tool)."""
+
+    error: str | None = None
+    task_success: TaskSuccessSchema | None = None
+    trajectory: TrajectorySchema | None = None
+    trajectory_steps: list[TrajectoryStep] = Field(default_factory=list)

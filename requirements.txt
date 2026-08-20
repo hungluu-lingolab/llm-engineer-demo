@@ -29,6 +29,10 @@ langfuse>=2.0.0
 langchain-openai>=0.2.0
 langgraph-checkpoint>=2.0.0      # MemorySaver (Section 5)
 
+# ─── Module II, Bài 4: Agentic Tool Design & Integration (MCP) ───────────────
+mcp>=1.0.0                       # MCP server (wellness_server.py, FastMCP)
+langchain-mcp-adapters>=0.1.0    # MCP client (MultiServerMCPClient), tool ra BaseTool chuẩn
+
 # ─── Dev / test ──────────────────────────────────────────────────────────────
 pytest>=8.2.0
 pytest-asyncio>=0.23.0

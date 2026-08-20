@@ -251,6 +251,76 @@
   .approval-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
   .approval-card.resolved { opacity: 0.6; }
   .approval-card .resolved-note { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  .eval-btn {
+    margin-top: 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    padding: 5px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .eval-btn:hover { color: var(--accent); border-color: var(--accent); }
+  .eval-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .eval-card {
+    margin-top: 8px;
+    padding: 10px 12px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 13px;
+  }
+  .eval-card .eval-title {
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--text);
+  }
+  .eval-section { margin-bottom: 10px; }
+  .eval-section:last-child { margin-bottom: 0; }
+  .eval-section .eval-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .eval-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 12px;
+    border: 1px solid var(--border);
+  }
+  .eval-badge.pass { color: #4caf6a; border-color: #4caf6a; background: rgba(76,175,106,0.08); }
+  .eval-badge.fail { color: var(--error); border-color: var(--error); background: rgba(255,92,108,0.08); }
+  .eval-reasoning { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .eval-scores {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 6px;
+    margin-top: 4px;
+  }
+  .eval-score-item {
+    background: rgba(255,255,255,0.03);
+    border-radius: 6px;
+    padding: 6px 8px;
+    text-align: center;
+  }
+  .eval-score-item .score-value { font-size: 15px; font-weight: 600; color: var(--accent); }
+  .eval-score-item .score-label { font-size: 10px; color: var(--muted); margin-top: 2px; }
+  .eval-issues { margin-top: 6px; font-size: 12px; color: var(--warn); }
+  .eval-issues li { margin-left: 16px; }
+  .eval-steps { margin-top: 8px; }
+  .eval-steps summary { cursor: pointer; color: var(--accent); font-size: 12px; }
+  .eval-error { color: var(--error); font-size: 12px; }
 </style>
 </head>
 <body>
@@ -425,6 +495,26 @@ function renderMessage(m, animate) {
     bubble.appendChild(renderApprovalCard(m.pendingApproval));
   }
 
+  // Bài 5 (Agent Evaluation): mỗi câu trả lời "done" của Assistant có nút
+  // "Đánh giá" — bấm mới gọi /assistant/evaluate (on-demand, không tự động
+  // mỗi lượt như tracing). m.evalResult lưu lại để không re-fetch khi renderAll().
+  if (m.canEvaluate) {
+    if (m.evalResult) {
+      bubble.appendChild(renderEvalCard(m.evalResult));
+    } else if (m.evalError) {
+      const err = document.createElement("div");
+      err.className = "eval-error";
+      err.textContent = `Lỗi đánh giá: ${m.evalError}`;
+      bubble.appendChild(err);
+    } else {
+      const evalBtn = document.createElement("button");
+      evalBtn.className = "eval-btn";
+      evalBtn.textContent = "📊 Đánh giá";
+      evalBtn.addEventListener("click", () => runEvaluation(m, evalBtn));
+      bubble.appendChild(evalBtn);
+    }
+  }
+
   messagesEl.appendChild(row);
   return { row, bubble };
 }
@@ -496,6 +586,133 @@ async function resolveApproval(approve, approveBtn, rejectBtn) {
   } finally {
     renderAll();
   }
+}
+
+// ── Bài 5: Agent Evaluation & Observability ──────────────────────────────────
+// Nút "Đánh giá" gọi /assistant/evaluate — server đọc LẠI checkpointer theo
+// thread_id (không cần frontend gửi kèm lịch sử/trajectory), chấm task success
+// + trajectory qua LLM-as-judge (eval.py), trả về ngay trong response.
+
+async function runEvaluation(msg, btn) {
+  btn.disabled = true;
+  btn.textContent = "⏳ Đang đánh giá...";
+
+  try {
+    const res = await fetch("/assistant/evaluate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ thread_id: assistantThreadId }),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new GuardrailError(res.status, body);
+
+    if (body.error) {
+      msg.evalError = body.error;
+    } else {
+      msg.evalResult = body;
+    }
+  } catch (err) {
+    msg.evalError = err.message;
+  } finally {
+    saveHistory();
+    renderAll();
+  }
+}
+
+function renderEvalCard(body) {
+  const card = document.createElement("div");
+  card.className = "eval-card";
+
+  const title = document.createElement("div");
+  title.className = "eval-title";
+  title.textContent = "📊 Kết quả đánh giá";
+  card.appendChild(title);
+
+  // Task Success (Section 1-2: End-to-end Evaluation)
+  const successSection = document.createElement("div");
+  successSection.className = "eval-section";
+  const successLabel = document.createElement("div");
+  successLabel.className = "eval-label";
+  successLabel.textContent = "Task Success";
+  successSection.appendChild(successLabel);
+
+  const ts = body.task_success;
+  const badge = document.createElement("span");
+  badge.className = `eval-badge ${ts.success ? "pass" : "fail"}`;
+  badge.textContent = `${ts.success ? "✓ Đạt" : "✗ Chưa đạt"} — điểm ${(ts.score * 100).toFixed(0)}%`;
+  successSection.appendChild(badge);
+
+  const reasoning = document.createElement("div");
+  reasoning.className = "eval-reasoning";
+  reasoning.textContent = ts.reasoning;
+  successSection.appendChild(reasoning);
+  card.appendChild(successSection);
+
+  // Trajectory Quality (Section 1-2: Trajectory Evaluation)
+  const trajSection = document.createElement("div");
+  trajSection.className = "eval-section";
+  const trajLabel = document.createElement("div");
+  trajLabel.className = "eval-label";
+  trajLabel.textContent = `Trajectory Quality (${body.trajectory_steps.length} bước, điểm TB ${body.trajectory.overall.toFixed(1)}/5)`;
+  trajSection.appendChild(trajLabel);
+
+  const scores = document.createElement("div");
+  scores.className = "eval-scores";
+  const scoreDefs = [
+    ["efficiency", "Hiệu quả"],
+    ["logical_order", "Thứ tự logic"],
+    ["tool_correctness", "Đúng tool"],
+    ["recovery", "Xử lý lỗi"],
+  ];
+  for (const [key, label] of scoreDefs) {
+    const item = document.createElement("div");
+    item.className = "eval-score-item";
+    const value = document.createElement("div");
+    value.className = "score-value";
+    value.textContent = `${body.trajectory[key]}/5`;
+    const lbl = document.createElement("div");
+    lbl.className = "score-label";
+    lbl.textContent = label;
+    item.appendChild(value);
+    item.appendChild(lbl);
+    scores.appendChild(item);
+  }
+  trajSection.appendChild(scores);
+
+  if (body.trajectory.issues && body.trajectory.issues.length) {
+    const issuesList = document.createElement("ul");
+    issuesList.className = "eval-issues";
+    for (const issue of body.trajectory.issues) {
+      const li = document.createElement("li");
+      li.textContent = issue;
+      issuesList.appendChild(li);
+    }
+    trajSection.appendChild(issuesList);
+  }
+
+  if (body.trajectory_steps.length) {
+    const details = document.createElement("details");
+    details.className = "eval-steps";
+    const summary = document.createElement("summary");
+    summary.textContent = "Xem chi tiết từng bước";
+    details.appendChild(summary);
+    body.trajectory_steps.forEach((step, i) => {
+      const item = document.createElement("div");
+      item.className = "source-item";
+      const name = document.createElement("div");
+      name.className = "src-name";
+      name.textContent = `${i + 1}. ${step.tool}(${JSON.stringify(step.args)})`;
+      const text = document.createElement("div");
+      text.textContent = step.observation;
+      item.appendChild(name);
+      item.appendChild(text);
+      details.appendChild(item);
+    });
+    trajSection.appendChild(details);
+  }
+
+  card.appendChild(trajSection);
+  return card;
 }
 
 function setMode(newMode) {
@@ -655,7 +872,10 @@ function renderAssistantResult(body) {
     saveHistory();
     renderMessage(msg);
   } else {
-    const msg = { role: "bot", text: body.answer || "" };
+    // status "done" — agent trả lời xong, không cần duyệt gì thêm → cho phép
+    // đánh giá lượt này (Bài 5). canEvaluate=false khi status vẫn đang chờ
+    // duyệt (nhánh trên) vì evaluate_thread sẽ trả lỗi lúc đó (chưa có final answer).
+    const msg = { role: "bot", text: body.answer || "", canEvaluate: true };
     history.push(msg);
     saveHistory();
     renderMessage(msg);

@@ -1,4 +1,4 @@
-"""Nodes — Module II, Bài 2-3 (LangGraph + Memory & Context Engineering).
+"""Nodes — Module II, Bài 2-4 (LangGraph + Memory/Context + Tool Design).
 
 Khác với app/agent/nodes.py (CRAG, Module I) vốn gọi thẳng app/llm/completion.py
 (native OpenAI SDK): agent này dùng `ChatOpenAI.bind_tools()` (langchain_openai)
@@ -12,6 +12,19 @@ Bài 3 thêm 2 node quanh vòng lặp agent⇄tools:
   - extract_and_store_node (cuối): trích 1 sự thật đáng nhớ → lưu long-term.
 Và nâng cấp agent_node: sliding window + summarization + re-inject chỉ dẫn
 (chống context rot, Section 2-4) — mọi thao tác này ở context.py (native LLM).
+
+Bài 4 (Tool Design & Integration, Section 2): 15 tool (tools.py) đã ở vùng
+"tool sprawl" theo bài học → agent_node KHÔNG bind cố định toàn bộ TOOLS nữa,
+mà bind theo top-k tool liên quan nhất tới câu hỏi hiện tại
+(tool_selection.retrieve_relevant_tools, embedding similarity). ToolNode
+(graph.py) vẫn được khởi tạo với ĐẦY ĐỦ TOOLS — nó cần biết cách THỰC THI mọi
+tool có thể được gọi, chỉ có phần BIND cho LLM (những gì model được "thấy" khi
+quyết định) mới bị giới hạn qua retrieval.
+
+Bài 4, Section 4 (MCP): retrieve_relevant_tools còn gộp cả tool từ MCP server
+độc lập (mcp/wellness_server.py qua mcp/client.py) — MCP client dùng giao thức
+JSON-RPC ASYNC (không có bản sync), nên agent_node ở đây chuyển thành `async
+def`, graph.py dùng `ainvoke` thay vì `invoke` (khác Bài 2-3 vốn sync hoàn toàn).
 """
 
 from __future__ import annotations
@@ -23,16 +36,16 @@ from langgraph.graph import END
 
 from app.agent_m2 import context, memory
 from app.agent_m2.state import AssistantState
-from app.agent_m2.tools import TOOLS
+from app.agent_m2.tool_selection import retrieve_relevant_tools
 from app.config import settings
 
 # Chỉ dẫn cốt lõi — dùng CẢ cho system prompt (đầu context) VÀ re-injection
 # (cuối context, chống instruction fade-out khi hội thoại dài — Section 4).
 CORE_INSTRUCTIONS = (
-    "Dùng tool khi cần thông tin lịch, đặt lời nhắc, hoặc tìm nhà hàng. "
-    "Với câu hỏi về một khoảng thời gian (vd: 'tuần này'), tự tính "
-    "start_date/end_date rồi gọi check_calendar MỘT LẦN DUY NHẤT — "
-    "không gọi lặp lại cho từng ngày riêng lẻ."
+    "Bạn chỉ thấy MỘT PHẦN tool phù hợp nhất với câu hỏi hiện tại, không phải "
+    "toàn bộ tool hệ thống có. Với câu hỏi về một khoảng thời gian (vd: 'tuần "
+    "này'), tự tính start_date/end_date rồi gọi check_calendar MỘT LẦN DUY "
+    "NHẤT — không gọi lặp lại cho từng ngày riêng lẻ."
 )
 
 
@@ -46,8 +59,10 @@ def _system_prompt() -> str:
 
 
 @lru_cache(maxsize=1)
-def _llm_with_tools():
-    """Lazy-init: tránh gọi ra ngoài (đọc API key) lúc import module cho test.
+def _base_llm():
+    """LLM chưa bind tool — dùng chung, chỉ khởi tạo client 1 lần (Bài 4: bind
+    tool đổi theo từng lượt qua retrieval nên không thể cache llm.bind_tools()
+    như Bài 2-3 nữa, nhưng client HTTP vẫn nên tái dùng).
 
     Truyền thẳng `api_key` từ settings.api_keys[0] thay vì để ChatOpenAI tự đọc
     biến môi trường OPENAI_API_KEY — repo này dùng OPENAI_API_KEYS (số nhiều,
@@ -56,12 +71,23 @@ def _llm_with_tools():
     """
     from langchain_openai import ChatOpenAI
 
-    llm = ChatOpenAI(
+    return ChatOpenAI(
         model=settings.llm_model,
         temperature=settings.llm_temperature,
         api_key=settings.api_keys[0] if settings.api_keys else None,
     )
-    return llm.bind_tools(TOOLS)
+
+
+async def _llm_with_tools(query: str):
+    """Bind LLM với top-k tool liên quan tới `query` (Bài 4, Section 2: Tool
+    Retrieval) — KHÔNG bind cố định toàn bộ tool mỗi lượt, giảm token + tăng
+    độ chính xác chọn tool (bài học: >20 tool độ chính xác giảm mạnh).
+
+    async vì retrieve_relevant_tools cần await MCP client (Section 4) ở lần
+    load tool đầu tiên (sau đó có cache, nhưng hàm vẫn giữ chữ ký async cho
+    nhất quán — awaiting một future đã resolve gần như free)."""
+    relevant = await retrieve_relevant_tools(query, k=settings.agent_tool_retrieval_k)
+    return _base_llm().bind_tools(relevant)
 
 
 # ── Loop termination (Section 3): phát hiện agent lặp lại cùng 1 tool call ────
@@ -127,7 +153,7 @@ def compact_node(state: AssistantState) -> dict:
     return {"messages": removals + [summary_msg]}
 
 
-def agent_node(state: AssistantState) -> dict:
+async def agent_node(state: AssistantState) -> dict:
     """Gọi LLM (kèm tool binding). CHỈ shape prompt TẠM THỜI rồi gọi model.
 
     Khác compact_node: mọi thao tác ở đây là EPHEMERAL — dựng một list `messages`
@@ -140,6 +166,9 @@ def agent_node(state: AssistantState) -> dict:
       - Sliding window: giữ N message gần nhất.
       - Repetition warning: chèn nếu agent lặp cùng 1 tool call.
       - Re-inject CORE_INSTRUCTIONS ở CUỐI (vị trí attention cao — chống fade-out).
+
+    async (Bài 4, Section 4): _llm_with_tools cần await MCP client — LangGraph
+    hỗ trợ node async natively, graph.py gọi ainvoke() thay vì invoke().
     """
     history = context.sliding_window(state["messages"], settings.agent_max_messages)
 
@@ -155,8 +184,23 @@ def agent_node(state: AssistantState) -> dict:
 
     messages = context.reinject_instructions(messages, CORE_INSTRUCTIONS)
 
-    response = _llm_with_tools().invoke(messages)
+    query = _latest_human_query(state["messages"])
+    llm = await _llm_with_tools(query)
+    response = await llm.ainvoke(messages)
     return {"messages": [response]}
+
+
+def _latest_human_query(messages: list) -> str:
+    """Tìm tin nhắn user gần nhất làm query cho tool retrieval.
+
+    Giữa 1 vòng agent⇄tools, message cuối có thể là tool result (không phải
+    câu hỏi) — nên phải quét ngược tìm đúng message role "human"/"user", không
+    chỉ lấy messages[-1].
+    """
+    for m in reversed(messages):
+        if context._role_of(m) in ("human", "user"):
+            return context._text_of(m)
+    return ""
 
 
 def should_continue(state: AssistantState) -> str:

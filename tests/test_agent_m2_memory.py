@@ -184,7 +184,7 @@ def test_extract_and_store_noop_without_user_id(monkeypatch):
 
 # ── Full graph: recall → agent → store (LangGraph thật, LLM mock) ────────────
 
-def test_full_graph_recalls_then_stores(monkeypatch):
+async def test_full_graph_recalls_then_stores(monkeypatch):
     """End-to-end: agent trả lời (không tool call) → graph phải qua recall + store."""
     graph_mod._build_graph.cache_clear()
 
@@ -194,17 +194,20 @@ def test_full_graph_recalls_then_stores(monkeypatch):
     monkeypatch.setattr(nodes.memory, "save_to_long_term", lambda uid, fact: stored.append((uid, fact)))
 
     class FakeLLM:
-        def invoke(self, messages):
+        async def ainvoke(self, messages):
             # Kiểm tra recall context đã được chèn vào messages gửi cho LLM.
             assert any("dị ứng hải sản" in str(m) for m in messages)
             return AIMessage(content="Gợi ý món chay cho bạn.")
 
-    monkeypatch.setattr(nodes, "_llm_with_tools", lambda: FakeLLM())
+    async def fake_llm_with_tools(query=""):
+        return FakeLLM()
+
+    monkeypatch.setattr(nodes, "_llm_with_tools", fake_llm_with_tools)
     # store_node gọi native completion.chat để trích fact.
     from app.llm import completion
     monkeypatch.setattr(completion, "chat", lambda messages, params: "Minh thích ăn chay")
 
-    result = graph_mod.start_conversation("thread-mem-1", "Gợi ý món tối nay", user_id="minh")
+    result = await graph_mod.start_conversation("thread-mem-1", "Gợi ý món tối nay", user_id="minh")
 
     assert result["status"] == "done"
     assert result["answer"] == "Gợi ý món chay cho bạn."
@@ -259,7 +262,7 @@ def test_compact_node_noop_guard_when_not_enough_history():
     assert out == {}
 
 
-def test_full_graph_compacts_once_and_reuses_across_tool_loop(monkeypatch):
+async def test_full_graph_compacts_once_and_reuses_across_tool_loop(monkeypatch):
     """Điểm mấu chốt kiến trúc: compact CHỈ chạy 1 lần/lượt (ngay sau recall, TRƯỚC
     khi vào vòng agent⇄tools) — dù vòng lặp gọi agent_node 2 lần (trước và sau khi
     tool chạy), summarize_text chỉ được gọi ĐÚNG 1 LẦN cho cả lượt."""
@@ -284,24 +287,27 @@ def test_full_graph_compacts_once_and_reuses_across_tool_loop(monkeypatch):
     responses = iter([call_1, call_2])
 
     class FakeLLM:
-        def invoke(self, messages):
+        async def ainvoke(self, messages):
             return next(responses)
 
-    monkeypatch.setattr(nodes, "_llm_with_tools", lambda: FakeLLM())
+    async def fake_llm_with_tools(query=""):
+        return FakeLLM()
+
+    monkeypatch.setattr(nodes, "_llm_with_tools", fake_llm_with_tools)
 
     # Nạp sẵn nhiều message cũ vào checkpointer trước lượt này, đủ dài để vượt
     # ngưỡng compact NGAY khi recall xong (cần > 1 message để có phần "cũ" nén được).
     config = {"configurable": {"thread_id": "thread-compact-1"}}
     graph_app = graph_mod._build_graph()
-    graph_app.update_state(
+    await graph_app.aupdate_state(
         config,
         {"messages": [{"role": "user", "content": "x" * 400} for _ in range(3)]},
     )
 
-    pending = graph_mod.start_conversation("thread-compact-1", "Chiều nay tôi có lịch gì?")
+    pending = await graph_mod.start_conversation("thread-compact-1", "Chiều nay tôi có lịch gì?")
     assert pending["status"] == "pending_approval"  # dừng trước check_calendar (HITL)
 
-    result = graph_mod.resume_conversation("thread-compact-1", approve=True)
+    result = await graph_mod.resume_conversation("thread-compact-1", approve=True)
 
     assert result["status"] == "done"
     assert result["answer"] == "Xong rồi."
