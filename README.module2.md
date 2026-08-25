@@ -16,6 +16,7 @@ Module II chuyển từ "LLM trả lời câu hỏi" sang "LLM tự hành độn
 | **3** | **Memory & Context Engineering** | `agent_m2/memory.py`, `context.py` — **long-term memory + compaction** |
 | **4** | **Agentic Tool Design & Integration** | `agent_m2/tools.py`, `tool_selection.py`, `mcp/` — **15 tool, error handling, idempotency, tool retrieval, MCP server/client** |
 | **5** | **Agent Evaluation & Observability** | `agent_m2/eval.py` — **LangFuse tracing + Task Success/Trajectory eval, nút Đánh giá trên UI** |
+| **6** | **Multi-Agent Systems** | `agent_m2/multi_agent/` — **4 pattern chạy được: Sequential, Hierarchical, Collaborative, Swarm** |
 
 ### Buổi 2 — Building Agents với LangGraph
 
@@ -229,6 +230,79 @@ gọi `/assistant/evaluate`, hiện ngay badge Task Success (✓/✗ + điểm %
 Trajectory Quality (efficiency/thứ tự/tool/recovery, thang 1-5), danh sách
 issues nếu có, và `<details>` xem lại từng bước tool call + observation.
 
+### Buổi 6 — Multi-Agent Systems
+
+Một agent với quá nhiều tool/trách nhiệm trở nên khó kiểm soát (đã thấy rõ ở
+Bài 4: 15 tool đã cần tool retrieval). Buổi này chia nhỏ công việc cho nhiều
+agent chuyên biệt — **4 pattern** (Section 1), cả 4 đều code chạy được, trên
+CÙNG domain trợ lý cá nhân (tái dùng `tools.py`/`TOOL_GROUPS` từ Bài 4) để dễ
+so sánh trực tiếp. Tách hẳn khỏi `agent_m2/graph.py` (1 agent đơn, Bài 2-5) —
+đây là 4 kiến trúc multi-agent độc lập, không phải nâng cấp thêm.
+
+| Pattern | File | Kiến trúc demo | Cơ chế LangGraph |
+|---|---|---|---|
+| **Sequential** | [`sequential.py`](app/agent_m2/multi_agent/sequential.py) | Planner → Scheduler → Notifier, thứ tự CỐ ĐỊNH | `add_edge` tuyến tính |
+| **Hierarchical** | [`hierarchical.py`](app/agent_m2/multi_agent/hierarchical.py) | Supervisor điều phối 3 Worker theo domain (calendar/dining/wellness) | `add_conditional_edges` từ Supervisor + mỗi Worker là 1 **subgraph** state riêng |
+| **Collaborative** | [`collaborative.py`](app/agent_m2/multi_agent/collaborative.py) | Planner ⇄ Critic phản biện lặp vòng tới khi duyệt | vòng lặp có điều kiện + `MAX_ROUNDS` cứng |
+| **Swarm** | [`swarm.py`](app/agent_m2/multi_agent/swarm.py) | 3 agent domain NGANG HÀNG, tự handoff | `Command(goto=..., update=...)` — agent con tự quyết định đích, không qua điều phối viên |
+
+```bash
+# Sequential — 3 bước cố định, trả về đủ cả 3 sản phẩm trung gian
+curl -X POST http://localhost:8000/multi-agent/sequential \
+  -H "Content-Type: application/json" \
+  -d '{"request": "Đặt bàn ăn tối thứ 6 này cho 4 người ở Quận 1"}'
+
+# Hierarchical — Supervisor tự chọn worker, có thể gọi nhiều worker liên tiếp
+curl -X POST http://localhost:8000/multi-agent/hierarchical \
+  -H "Content-Type: application/json" \
+  -d '{"request": "Tôi muốn ăn tối ở Quận 1 và sau đó đi tập gym gần đó"}'
+
+# Collaborative — trả kèm rounds/approved để thấy QUÁ TRÌNH phản biện
+curl -X POST http://localhost:8000/multi-agent/collaborative \
+  -H "Content-Type: application/json" \
+  -d '{"request": "Lên kế hoạch một buổi hẹn hò cuối tuần này ở Hà Nội"}'
+
+# Swarm — entry_agent mô phỏng "kênh liên hệ" user chọn; câu hỏi lệch domain
+# sẽ tự handoff (xem handoff_log trong response)
+curl -X POST http://localhost:8000/multi-agent/swarm \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Tìm nhà hàng gần Quận 1", "entry_agent": "calendar"}'
+# → {"answer": "...", "final_agent": "dining", "handoff_log": ["calendar → dining"]}
+```
+
+> **Mỗi "sub-agent" có phải 1 agent thật hay chỉ là 1 node function?** Mặc
+> định trong LangGraph, một node CHỈ là hàm `(state) -> dict` — nếu mọi
+> "agent" dùng chung 1 `StateGraph`, chúng chỉ khác nhau ở tên, không có ranh
+> giới cô lập dữ liệu nào (Sequential/Collaborative/Swarm ở đây đều vậy: mọi
+> node đọc/ghi 1 state phẳng chung). `hierarchical.py` minh hoạ cách làm ranh
+> giới đó THẬT: mỗi Worker là 1 **subgraph độc lập** với `WorkerState` riêng
+> (`messages` nội bộ, tool-call bookkeeping) — khi nhúng subgraph đã compile
+> làm 1 node của graph cha, LangGraph chỉ truyền qua các field TRÙNG TÊN giữa
+> 2 schema (`task` vào, `result` ra); mọi field nội bộ khác không hề lộ ra
+> Supervisor. Đây là lý do một bug thật đã xảy ra ở bản đầu tiên (node phẳng):
+> worker B đọc nhầm `ToolMessage` của worker A chạy trước nó trong cùng list
+> `messages` dùng chung — subgraph loại bỏ khả năng này bằng cơ chế, không
+> phải bằng kỷ luật lọc dữ liệu cẩn thận.
+
+> **Vì sao Swarm không dùng `Command` làm input trực tiếp cho `ainvoke()`?**
+> Thử nghiệm cho thấy LangGraph vẫn chạy qua entry point cố định của
+> `set_entry_point()` trước khi áp `Command`, gây ghi đè state 2 lần trong
+> cùng 1 step (`InvalidUpdateError`). Route "agent nào nhận tin nhắn đầu tiên"
+> phải nằm TRONG graph — dùng `add_conditional_edges(START, ...)` — không thể
+> chọn qua input, xem chi tiết trong docstring `swarm.py`.
+
+> **Luôn set `recursion_limit`** khi invoke bất kỳ graph multi-agent nào
+> (Section 3, warning bài học) — vòng Supervisor↔Worker hoặc Planner↔Critic
+> có thể chạy vô hạn nếu không có `MAX_ROUNDS`/điều kiện dừng rõ ràng. Cả 4
+> `run_*()` ở đây đều set `config={"recursion_limit": ...}`.
+
+**Framework Comparison (Section 2)** — bài học so sánh LangGraph/CrewAI/OpenAI
+Agents SDK/AutoGen; repo này **chỉ code bằng LangGraph** (đã học Bài 2-5, tái
+dùng nguyên state/checkpointer/HITL) — lý do bài học nêu: *"tránh phải học lại
+1 mental model mới hoàn toàn như khi chuyển sang CrewAI/AutoGen"*. Xem tài
+liệu bài học (handbook Bài 6, Section 2) nếu muốn đối chiếu cú pháp
+CrewAI/OpenAI Agents SDK.
+
 ---
 
 ## Cấu trúc (Module II)
@@ -241,9 +315,11 @@ app/
 │                      #   Buổi 4: tools.py (15 tool), tool_selection.py (grouping + retrieval)
 │                      #     + mcp/ (wellness_server.py, client.py — MCP Server/Client thật)
 │                      #   Buổi 5: eval.py (Task Success + Trajectory eval, LLM-as-judge)
+│                      #   Buổi 6: multi_agent/ (Sequential, Hierarchical, Collaborative, Swarm)
 ├── monitoring/        # tracing.py — LangFuse hooks (Module I, tái dùng cho agent_m2 Bài 5)
 └── api/
-    └── routes_assistant.py   # /assistant/message, /assistant/approve, /assistant/evaluate
+    ├── routes_assistant.py     # /assistant/message, /assistant/approve, /assistant/evaluate
+    └── routes_multi_agent.py   # /multi-agent/{sequential,hierarchical,collaborative,swarm}
 ```
 
 > Cài đặt / chạy app / test / bảo mật: xem [README.md](README.md).

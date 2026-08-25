@@ -14,7 +14,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import routes_admin, routes_assistant, routes_chat
+from app.api import routes_admin, routes_assistant, routes_chat, routes_multi_agent
 from app.config import settings
 from app.guardrails.checks import GuardrailViolation
 
@@ -27,6 +27,7 @@ app = FastAPI(
 app.include_router(routes_chat.router)
 app.include_router(routes_admin.router)
 app.include_router(routes_assistant.router)
+app.include_router(routes_multi_agent.router)
 
 _STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")

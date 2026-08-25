@@ -117,3 +117,43 @@ class AssistantEvaluateResponse(BaseModel):
     task_success: TaskSuccessSchema | None = None
     trajectory: TrajectorySchema | None = None
     trajectory_steps: list[TrajectoryStep] = Field(default_factory=list)
+
+
+# ── Module II, Bài 6: Multi-Agent Systems ─────────────────────────────────────
+
+class MultiAgentRequest(BaseModel):
+    """Chung cho Sequential/Hierarchical/Collaborative — chỉ cần 1 yêu cầu text."""
+
+    request: str = Field(min_length=1, description="Yêu cầu/nhiệm vụ gửi cho hệ thống multi-agent")
+
+
+class SequentialResponse(BaseModel):
+    plan: str
+    schedule_result: str
+    notification: str
+
+
+class HierarchicalResponse(BaseModel):
+    notes: dict[str, str] = Field(description="domain -> ghi chú worker đã trả về")
+    answer: str
+
+
+class CollaborativeResponse(BaseModel):
+    plan: str
+    feedback: str
+    approved: bool
+    rounds: int
+
+
+class SwarmRequest(BaseModel):
+    message: str = Field(min_length=1)
+    entry_agent: str = Field(
+        default="calendar",
+        description="Agent nhận tin nhắn đầu tiên: calendar, dining, hoặc wellness",
+    )
+
+
+class SwarmResponse(BaseModel):
+    answer: str
+    final_agent: str = Field(description="Agent đã trả lời cuối cùng, sau (nếu có) handoff")
+    handoff_log: list[str] = Field(description="Vết chuyển giao, vd ['calendar → dining']")
