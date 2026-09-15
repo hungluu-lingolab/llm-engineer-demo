@@ -55,7 +55,7 @@ class TrajectoryResult(BaseModel):
 class AgentEvalResult(BaseModel):
     """Gộp cả 2 chiều — trả về cho API/UI trong 1 lần gọi (Section 1: 4 eval dimensions,
     2 chiều đầu ở đây; Tool Accuracy nằm trong trajectory.tool_correctness, Cost/Latency
-    lấy trực tiếp từ LangFuse span thay vì LLM judge — xem monitoring/tracing.py)."""
+    lấy trực tiếp từ LangSmith span thay vì LLM judge — xem monitoring/tracing.py)."""
 
     task_success: TaskSuccessResult
     trajectory: TrajectoryResult

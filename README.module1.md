@@ -215,16 +215,16 @@ curl -X POST http://localhost:8000/chat \
 > Bật `RAG_RERANK_ENABLED`-style: `GUARDRAILS_LLM_INJECTION_CHECK=true` để bật thêm
 > LLM-based injection check (chậm hơn regex nhưng bắt được biến thể tinh vi).
 
-**Monitoring** — `monitoring/tracing.py` (hooks tối thiểu cho LangFuse, gọi SDK trực tiếp — không qua LangChain). Nối vào cả 3 hàm trong `pipeline.py`: `answer()`/`answer_structured()` trace 1 span/lần gọi (input, output, latency), `answer_stream()` trace sau khi stream kết thúc (ghép toàn bộ token lại vì không có "span giữa chừng" cho streaming).
+**Monitoring** — `monitoring/tracing.py` (hooks tối thiểu cho LangSmith, gọi SDK trực tiếp `Client.create_run`/`update_run` — không qua LangChain callback). Nối vào cả 3 hàm trong `pipeline.py`: `answer()`/`answer_structured()` trace 1 run/lần gọi (input, output, latency), `answer_stream()` trace sau khi stream kết thúc (ghép toàn bộ token lại vì không có "run giữa chừng" cho streaming). Golden dataset + eval pipeline tự động (Module III, Bài 2) cũng dùng chung project LangSmith này.
 
 ```bash
-# .env: điền LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY từ project trên cloud.langfuse.com
+# .env: điền LANGSMITH_API_KEY từ project trên smith.langchain.com
 MONITORING_ENABLED=true
 ```
 
 > Mặc định `MONITORING_ENABLED=false` — khi đó `trace_answer`/`trace_stream` là
-> no-op hoàn toàn (không cả import package `langfuse`), nên không cài LangFuse
-> vẫn chạy được toàn bộ codebase. Cài `langfuse` (xem `requirements.txt`) chỉ
+> no-op hoàn toàn (không cả import package `langsmith`), nên không cài LangSmith
+> vẫn chạy được toàn bộ codebase. Cài `langsmith` (xem `requirements.txt`) chỉ
 > khi thật sự bật monitoring.
 
 ### Buổi 8 — Production Optimization
@@ -287,7 +287,7 @@ app/
 ├── agent/             # ✓ Buổi 6 — CRAG + Query Decomposition (LangGraph)
 ├── guardrails/        # ✓ injection.py, pii.py, checks.py — nối vào pipeline.py
 ├── eval/              # ✓ judge.py (LLM-as-Judge), ragas_native.py, metrics.py
-├── monitoring/        # ✓ tracing.py — LangFuse hooks tối thiểu, no-op khi tắt
+├── monitoring/        # ✓ tracing.py — LangSmith hooks tối thiểu, no-op khi tắt
 └── optimization/      # ✓ prompt_cache.py, caching.py, routing.py — latency & cost tối ưu
 ```
 

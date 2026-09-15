@@ -1,12 +1,13 @@
 # LLM Engineer — Demo Codebase
 
 Codebase thực hành xuyên suốt khoá **LLM Engineer**, xây dựng dần theo từng buổi học,
-gồm 2 module độc lập trên cùng 1 FastAPI app:
+gồm 3 module độc lập trên cùng 1 FastAPI app:
 
 | Module | Chủ đề | Chi tiết |
 |--------|--------|----------|
 | **Module I** | Vietnamese Legal Assistant — RAG Chatbot (chat completions → RAG → agentic RAG → eval/guardrails → production optimization) | [README.module1.md](README.module1.md) |
 | **Module II** | AI Agent — Personal Assistant (LangGraph: ReAct loop, HITL, memory, context engineering, tool design, MCP) | [README.module2.md](README.module2.md) |
+| **Module III** | LLM Ops — Eval Pipelines (golden dataset trên LangSmith, regression gate, CI) | [README.module3.md](README.module3.md) |
 
 > **Triết lý:** dùng **native SDK** (OpenAI, Qdrant...) thay vì framework cao cấp, để
 > engineer hiểu và kiểm soát từng lời gọi. **API-first** với FastAPI. LangGraph (Module I
@@ -76,11 +77,13 @@ app/
 ├── agent_m2/             # Module II — Personal Assistant agent (LangGraph) — chi tiết ở README.module2.md
 ├── guardrails/           # Module I — injection.py, pii.py, checks.py
 ├── eval/                 # Module I — judge.py (LLM-as-Judge), ragas_native.py, metrics.py
-├── monitoring/           # Module I — tracing.py, LangFuse hooks tối thiểu
+├── eval_pipeline/        # Module III — golden dataset (LangSmith) + runner + regression gate
+├── monitoring/           # Module I — tracing.py, LangSmith hooks tối thiểu
 └── optimization/         # Module I — prompt_cache.py, caching.py, routing.py
 ```
 
 Chi tiết từng buổi học, từng file, ví dụ curl: xem
-[README.module1.md](README.module1.md) và [README.module2.md](README.module2.md).
+[README.module1.md](README.module1.md), [README.module2.md](README.module2.md),
+[README.module3.md](README.module3.md).
 
 > **Bảo mật:** `.env` đã nằm trong `.gitignore`. Không bao giờ commit API key.

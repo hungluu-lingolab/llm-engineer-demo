@@ -62,4 +62,4 @@ class GraphState(TypedDict, total=False):
     web_search_used: bool            # có fallback web search không (để hiển thị UI)
     generation: str                  # câu trả lời cuối cùng
     output_issues: list[str]         # (Buổi 7) vấn đề check_output phát hiện, nếu có
-    _trace_span: Any                 # (Buổi 7) span cha LangFuse — xem monitoring/tracing.py
+    _trace_span: Any                 # (Buổi 7) span cha LangSmith — xem monitoring/tracing.py

@@ -15,7 +15,7 @@ Module II chuyển từ "LLM trả lời câu hỏi" sang "LLM tự hành độn
 | **2** | **Building Agents với LangGraph** | `agent_m2/` — **ReAct loop + HITL chạy được** |
 | **3** | **Memory & Context Engineering** | `agent_m2/memory.py`, `context.py` — **long-term memory + compaction** |
 | **4** | **Agentic Tool Design & Integration** | `agent_m2/tools.py`, `tool_selection.py`, `mcp/` — **15 tool, error handling, idempotency, tool retrieval, MCP server/client** |
-| **5** | **Agent Evaluation & Observability** | `agent_m2/eval.py` — **LangFuse tracing + Task Success/Trajectory eval, nút Đánh giá trên UI** |
+| **5** | **Agent Evaluation & Observability** | `agent_m2/eval.py` — **LangSmith tracing + Task Success/Trajectory eval, nút Đánh giá trên UI** |
 | **6** | **Multi-Agent Systems** | `agent_m2/multi_agent/` — **4 pattern chạy được: Sequential, Hierarchical, Collaborative, Swarm** |
 
 ### Buổi 2 — Building Agents với LangGraph
@@ -175,21 +175,21 @@ không đủ cho agent, vì agent có thể ra đúng đáp án bằng con đư�
 tool thừa, chọn sai tham số, tốn kém). Buổi này thêm 2 lớp: **Observability**
 (giám sát online, luôn bật) và **Evaluation** (chấm chất lượng offline/on-demand).
 
-**Observability — LangFuse tracing (Section 3).** [`graph.py`](app/agent_m2/graph.py)
+**Observability — LangSmith tracing (Section 3).** [`graph.py`](app/agent_m2/graph.py)
 bọc `start_conversation`/`resume_conversation` qua `trace_answer`
 ([`monitoring/tracing.py`](app/monitoring/tracing.py) — **tái dùng nguyên xi**
-từ Module I, không viết lại LangFuse integration). Mỗi lượt chat = 1 span, gắn
+từ Module I, không viết lại LangSmith integration). Mỗi lượt chat = 1 run, gắn
 input/output/latency. Khác `app/agent/nodes.py` (CRAG, Module I) vốn tạo
-NESTED span cho từng node graph, ở đây trace 1 span PHẲNG cho cả lượt — đơn
+NESTED run cho từng node graph, ở đây trace 1 run PHẲNG cho cả lượt — đơn
 giản hơn, không phải xuyên `_trace_span` qua 5 node đã ổn định từ Bài 2-4.
 
 ```bash
-# .env: điền LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY (như Module I, Bài 7)
+# .env: điền LANGSMITH_API_KEY (như Module I, Bài 7)
 MONITORING_ENABLED=true
 ```
 
 > Mặc định `MONITORING_ENABLED=false` → `trace_answer` no-op hoàn toàn, không
-> bắt buộc cài/kích hoạt LangFuse để chạy phần còn lại của agent.
+> bắt buộc cài/kích hoạt LangSmith để chạy phần còn lại của agent.
 
 **Evaluation — Task Success + Trajectory Quality (Section 1-2).**
 [`eval.py`](app/agent_m2/eval.py) chấm 2 chiều bằng LLM-as-judge (native
@@ -316,7 +316,7 @@ app/
 │                      #     + mcp/ (wellness_server.py, client.py — MCP Server/Client thật)
 │                      #   Buổi 5: eval.py (Task Success + Trajectory eval, LLM-as-judge)
 │                      #   Buổi 6: multi_agent/ (Sequential, Hierarchical, Collaborative, Swarm)
-├── monitoring/        # tracing.py — LangFuse hooks (Module I, tái dùng cho agent_m2 Bài 5)
+├── monitoring/        # tracing.py — LangSmith hooks (Module I, tái dùng cho agent_m2 Bài 5)
 └── api/
     ├── routes_assistant.py     # /assistant/message, /assistant/approve, /assistant/evaluate
     └── routes_multi_agent.py   # /multi-agent/{sequential,hierarchical,collaborative,swarm}

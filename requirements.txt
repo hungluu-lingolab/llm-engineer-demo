@@ -21,7 +21,9 @@ langgraph>=0.2.0                 # CHỈ orchestrate control flow; mọi call v�
 tavily-python>=0.5.0             # web search fallback (native, không qua LangChain)
 
 # ─── Buổi 7: Evaluation, Guardrails & Monitoring ─────────────────────────────
-langfuse>=2.0.0
+# (thay LangFuse bằng LangSmith — xem app/monitoring/tracing.py, cũng dùng cho
+# eval pipeline ở Module III, Bài 2)
+langsmith>=0.1.0
 
 # ─── Module II, Bài 2: Building Agents với LangGraph ─────────────────────────
 # ToolNode/bind_tools cần interface LangChain — ngoại lệ có chủ đích so với
@@ -32,6 +34,10 @@ langgraph-checkpoint>=2.0.0      # MemorySaver (Section 5)
 # ─── Module II, Bài 4: Agentic Tool Design & Integration (MCP) ───────────────
 mcp>=1.0.0                       # MCP server (wellness_server.py, FastMCP)
 langchain-mcp-adapters>=0.1.0    # MCP client (MultiServerMCPClient), tool ra BaseTool chuẩn
+
+# ─── Module III, Bài 2: LLM Evaluation Pipelines ─────────────────────────────
+# langsmith đã có ở trên (Buổi 7, dùng chung cho tracing + golden dataset/evaluate()).
+pyyaml>=6.0                      # đọc golden set (data/eval/legal_qa/v1.yaml)
 
 # ─── Dev / test ──────────────────────────────────────────────────────────────
 pytest>=8.2.0

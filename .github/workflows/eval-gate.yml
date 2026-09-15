@@ -1,0 +1,54 @@
+name: eval-gate
+
+# Module III, Bài 2, Section 6 (CI Integration: Eval Gate).
+#
+# Hai tầng theo bài học:
+#   - PR chạm prompts/retrieval/eval data: chạy SUBSET (rẻ, nhanh, chặn merge).
+#   - Nightly: chạy FULL dataset (không chặn PR, chỉ báo cáo xu hướng).
+#
+# paths: filter — bỏ qua eval nếu PR không đụng gì liên quan tới answer quality
+# (kiểm soát chi phí CI, Section 6).
+on:
+  pull_request:
+    paths:
+      - "app/prompts/**"
+      - "app/retrieval/**"
+      - "app/guardrails/**"
+      - "app/eval/**"
+      - "app/eval_pipeline/**"
+      - "data/eval/**"
+      - "data/legal_docs/**"
+  schedule:
+    - cron: "0 2 * * *" # 02:00 UTC hằng ngày — full dataset, không chặn PR
+
+jobs:
+  eval-subset:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -r requirements.txt
+      - name: Run eval subset (chặn merge nếu FAIL)
+        env:
+          OPENAI_API_KEYS: ${{ secrets.OPENAI_API_KEYS }}
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          MONITORING_ENABLED: "false" # tracing production tắt trong CI — chỉ cần eval
+        run: python -m scripts.eval_pipeline_demo --subset 20
+
+  eval-full-nightly:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -r requirements.txt
+      - name: Run full golden set (không chặn gì — chỉ báo cáo xu hướng)
+        env:
+          OPENAI_API_KEYS: ${{ secrets.OPENAI_API_KEYS }}
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          MONITORING_ENABLED: "false"
+        run: python -m scripts.eval_pipeline_demo
+        continue-on-error: true # nightly chỉ báo cáo, KHÔNG fail job (Section 6)

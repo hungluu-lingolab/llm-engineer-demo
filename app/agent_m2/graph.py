@@ -41,10 +41,10 @@ trợ route handler async natively, không cần thay đổi gì thêm ở tần
 
 Bài 5 (Observability, Section 3): start_conversation/resume_conversation bọc
 qua trace_answer (monitoring/tracing.py, tái dùng nguyên xi từ Module I —
-KHÔNG viết lại LangFuse integration). Khác app/agent/nodes.py (CRAG) vốn tạo
+KHÔNG viết lại LangSmith integration). Khác app/agent/nodes.py (CRAG) vốn tạo
 NESTED span cho từng node graph: ở đây trace 1 span PHẲNG cho cả lượt (giống
 cách trace_stream trace streaming) — đơn giản hơn, đủ để thấy latency/input/
-output mỗi lượt trên LangFuse dashboard mà không phải xuyên `_trace_span` qua
+output mỗi lượt trên LangSmith dashboard mà không phải xuyên `_trace_span` qua
 5 node đã ổn định từ Bài 2-4. evaluate_run (eval.py, Section 1-2) chấm CHẤT
 LƯỢNG (offline, on-demand qua nút "Đánh giá" ở UI) — khác trace (observability,
 luôn bật, không cần bấm nút) dù cả 2 cùng nhìn vào 1 lượt chạy.
@@ -147,7 +147,7 @@ async def start_conversation(thread_id: str, message: str, user_id: str = "") ->
     async (Bài 4): agent_node cần await MCP client — dùng ainvoke() thay vì
     invoke() (khác Bài 2-3 vốn sync hoàn toàn).
 
-    Bài 5 (Observability): bọc qua trace_answer — 1 span LangFuse/lượt, gắn
+    Bài 5 (Observability): bọc qua trace_answer — 1 span LangSmith/lượt, gắn
     input (message)/output (answer hoặc trạng thái chờ duyệt)/latency. No-op
     hoàn toàn nếu MONITORING_ENABLED=false (xem monitoring/tracing.py).
 

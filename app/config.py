@@ -105,13 +105,15 @@ class Settings(BaseSettings):
     )
     guardrails_min_answer_len: int = Field(default=10, alias="GUARDRAILS_MIN_ANSWER_LEN")
 
-    # ── Monitoring — LangFuse (Buổi 7, Section 4) ────────────────────────────
-    # Tắt mặc định: khi chưa điền LANGFUSE_* thật, tracing là no-op, không bắt
-    # buộc cài/kích hoạt LangFuse để chạy phần còn lại của codebase.
+    # ── Monitoring — LangSmith (Buổi 7, Section 4; Module III Bài 2) ─────────
+    # Tắt mặc định: khi chưa điền LANGSMITH_API_KEY thật, tracing là no-op,
+    # không bắt buộc cài/kích hoạt LangSmith để chạy phần còn lại của codebase.
     monitoring_enabled: bool = Field(default=False, alias="MONITORING_ENABLED")
-    langfuse_public_key: str = Field(default="", alias="LANGFUSE_PUBLIC_KEY")
-    langfuse_secret_key: str = Field(default="", alias="LANGFUSE_SECRET_KEY")
-    langfuse_host: str = Field(default="https://cloud.langfuse.com", alias="LANGFUSE_HOST")
+    langsmith_api_key: str = Field(default="", alias="LANGSMITH_API_KEY")
+    langsmith_project: str = Field(default="llm-engineer-demo", alias="LANGSMITH_PROJECT")
+    langsmith_endpoint: str = Field(
+        default="https://api.smith.langchain.com", alias="LANGSMITH_ENDPOINT"
+    )
 
     # ── App ─────────────────────────────────────────────────────────────────
     app_name: str = Field(default="Vietnamese Legal Assistant", alias="APP_NAME")

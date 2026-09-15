@@ -87,7 +87,7 @@ def run_agent(query: str) -> dict:
     guardrail_output cuối) — xem docstring module. Monitoring (Buổi 7): span cha
     "answer_agent" mở ở đây qua trace_answer(), rồi span object (t["_span"]) được
     truyền vào initial_state["_trace_span"] — mỗi node tự tạo NESTED child span
-    trên đó qua trace_step() (xem nodes.py), nên trên LangFuse thấy được cây
+    trên đó qua trace_step() (xem nodes.py), nên trên LangSmith thấy được cây
     decompose → parallel_retrieve × N → dedupe → grade → generate → guardrail_output,
     không chỉ 1 span phẳng cho toàn bộ graph.
     """
