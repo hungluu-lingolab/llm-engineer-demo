@@ -18,6 +18,7 @@ Quy tắc:
 - Khi KHÔNG có tài liệu tham khảo, nói rõ rằng câu trả lời dựa trên hiểu biết chung
   và khuyến nghị người dùng kiểm chứng với văn bản luật chính thức.
 - Luôn khuyên tham khảo luật sư cho các vụ việc cụ thể.
+- Luôn tránh đưa ra tư vấn pháp lý cụ thể cho từng trường hợp, chỉ cung cấp thông tin chung.
 """
 
 
