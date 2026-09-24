@@ -39,6 +39,12 @@ langchain-mcp-adapters>=0.1.0    # MCP client (MultiServerMCPClient), tool ra Ba
 # langsmith đã có ở trên (Buổi 7, dùng chung cho tracing + golden dataset/evaluate()).
 pyyaml>=6.0                      # đọc golden set (data/eval/legal_qa/v1.yaml)
 
+# ─── Module III, Bài 3: Cost Optimization & Caching ──────────────────────────
+# numpy: cosine similarity cho SemanticCache (app/optimization/caching.py, đã
+# dùng từ Module I Bài 8 nhưng thiếu sót ở đây — bổ sung khi thêm app/cost/).
+numpy>=1.24.0
+# pyyaml đã có ở trên (đọc data/cost/replay_questions.yaml).
+
 # ─── Dev / test ──────────────────────────────────────────────────────────────
 pytest>=8.2.0
 pytest-asyncio>=0.23.0

@@ -1,0 +1,190 @@
+dataset: cost_replay
+version: 1
+created: 2026-09-17
+source: "Tái dùng 18 câu lookup từ data/eval/legal_qa/v1.yaml (Bài 2) làm nền,
+  thêm biến thể trùng/gần giống để đo hit rate 2 tầng cache (Bài 3)."
+
+# Module III, Bài 3, Section 8 (Hands-on): tập replay để đo cost baseline rồi
+# so sánh qua từng tầng cache. Bài học đề xuất 200 câu ~30% trùng/gần giống —
+# ở đây dùng quy mô NHỎ HƠN (46 câu, ~43% trùng/gần giống) để demo trước lớp
+# không tốn quá nhiều tiền API, nhưng vẫn đủ để hit_rate có ý nghĩa thống kê.
+#
+# 4 nhóm:
+#   - "base"    (18 câu): distinct, lấy nguyên văn từ golden set Bài 2.
+#   - "repeat"  (10 câu): TRÙNG Y HỆT 1 câu base -> đo exact cache (tầng 1).
+#   - "similar" (10 câu): diễn đạt lại 1 câu base (không trùng ký tự) -> đo
+#     semantic cache (tầng 2) mà exact cache (tầng 1) sẽ MISS.
+#   - "volatile" (5 câu): có tham số ngày/số cụ thể -> is_volatile()=True,
+#     PHẢI bị semantic cache bỏ qua dù rất giống câu khác (false hit table).
+#   - "unique"  (3 câu): không trùng gì cả -> baseline noise, luôn miss cả 2 tầng.
+
+questions:
+  # ── base (18) — nguyên văn legal_qa_001..018, xem data/eval/legal_qa/v1.yaml ──
+  - id: base_001
+    group: base
+    question: "Nghị định này quy định về chế độ gì?"
+  - id: base_002
+    group: base
+    question: "Đối tượng áp dụng của Nghị định gồm mấy nhóm?"
+  - id: base_003
+    group: base
+    question: "Ai chi trả tiền lương cho người đại diện chủ sở hữu trực tiếp chuyên trách?"
+  - id: base_004
+    group: base
+    question: "Người đại diện vốn không chuyên trách hưởng tiền lương do ai chi trả?"
+  - id: base_005
+    group: base
+    question: "Mức tiền lương tối đa khi doanh nghiệp có lợi nhuận và đạt kế hoạch là bao nhiêu?"
+  - id: base_006
+    group: base
+    question: "Doanh nghiệp không có lợi nhuận thì mức tiền lương tối đa của Thành viên hội đồng là bao nhiêu?"
+  - id: base_007
+    group: base
+    question: "Doanh nghiệp bị lỗ thì mức tiền lương tối đa là bao nhiêu?"
+  - id: base_008
+    group: base
+    question: "Trường hợp doanh nghiệp giảm lỗ so với kế hoạch, mức tiền lương tối đa là bao nhiêu?"
+  - id: base_009
+    group: base
+    question: "Mức thù lao tối đa của Thành viên hội đồng không chuyên trách được giới hạn thế nào?"
+  - id: base_010
+    group: base
+    question: "Thời hạn hoàn trả phần tiền lương, thù lao đã tạm ứng vượt quy định là khi nào?"
+  - id: base_011
+    group: base
+    question: "Quỹ tiền thưởng của Thành viên hội đồng, Kiểm soát viên được trích từ đâu?"
+  - id: base_012
+    group: base
+    question: "Doanh nghiệp mới thành lập, mức tiền lương trong năm đầu tối đa là bao nhiêu?"
+  - id: base_013
+    group: base
+    question: "Chức danh nào có mức lương cơ bản cao nhất theo Điều 4?"
+  - id: base_014
+    group: base
+    question: "Nghị định này có áp dụng cho ngân hàng chính sách không?"
+  - id: base_015
+    group: base
+    question: "Kiểm soát viên chuyên trách được xếp lương theo bảng lương nào?"
+  - id: base_016
+    group: base
+    question: "Mức tiền lương, thù lao, tiền thưởng cụ thể có được vượt quá mức tối đa quy định tại Chương II không?"
+  - id: base_017
+    group: base
+    question: "Mức thù lao tối đa (Điều 6) liên quan thế nào tới mức tiền lương tối đa (Điều 5) của cùng chức danh?"
+  - id: base_018
+    group: base
+    question: "Mức tiền lương tối đa cho doanh nghiệp thực hiện sản phẩm, dịch vụ công đạt kế hoạch là bao nhiêu?"
+
+  # ── repeat (10) — TRÙNG Y HỆT ký tự với 1 câu base -> exact cache (tầng 1) HIT ──
+  - id: repeat_001
+    group: repeat
+    question: "Nghị định này quy định về chế độ gì?"
+    duplicate_of: base_001
+  - id: repeat_002
+    group: repeat
+    question: "Ai chi trả tiền lương cho người đại diện chủ sở hữu trực tiếp chuyên trách?"
+    duplicate_of: base_003
+  - id: repeat_003
+    group: repeat
+    question: "Mức tiền lương tối đa khi doanh nghiệp có lợi nhuận và đạt kế hoạch là bao nhiêu?"
+    duplicate_of: base_005
+  - id: repeat_004
+    group: repeat
+    question: "Doanh nghiệp bị lỗ thì mức tiền lương tối đa là bao nhiêu?"
+    duplicate_of: base_007
+  - id: repeat_005
+    group: repeat
+    question: "Thời hạn hoàn trả phần tiền lương, thù lao đã tạm ứng vượt quy định là khi nào?"
+    duplicate_of: base_010
+  - id: repeat_006
+    group: repeat
+    question: "Quỹ tiền thưởng của Thành viên hội đồng, Kiểm soát viên được trích từ đâu?"
+    duplicate_of: base_011
+  - id: repeat_007
+    group: repeat
+    question: "Chức danh nào có mức lương cơ bản cao nhất theo Điều 4?"
+    duplicate_of: base_013
+  - id: repeat_008
+    group: repeat
+    question: "Nghị định này có áp dụng cho ngân hàng chính sách không?"
+    duplicate_of: base_014
+  - id: repeat_009
+    group: repeat
+    question: "Kiểm soát viên chuyên trách được xếp lương theo bảng lương nào?"
+    duplicate_of: base_015
+  - id: repeat_010
+    group: repeat
+    question: "Mức tiền lương tối đa khi doanh nghiệp có lợi nhuận và đạt kế hoạch là bao nhiêu?"
+    duplicate_of: base_005
+
+  # ── similar (10) — diễn đạt lại 1 câu base, KHÔNG trùng ký tự -> exact cache
+  # (tầng 1) MISS, semantic cache (tầng 2) phải HIT nếu ngưỡng threshold đúng ──
+  - id: similar_001
+    group: similar
+    question: "Cho tôi biết Nghị định này nói về nội dung gì?"
+    similar_to: base_001
+  - id: similar_002
+    group: similar
+    question: "Người đại diện chủ sở hữu trực tiếp chuyên trách nhận lương từ đâu?"
+    similar_to: base_003
+  - id: similar_003
+    group: similar
+    question: "Nếu công ty có lãi và đạt kế hoạch, lương tối đa tính thế nào?"
+    similar_to: base_005
+  - id: similar_004
+    group: similar
+    question: "Khi công ty làm ăn thua lỗ, mức lương tối đa được quy định ra sao?"
+    similar_to: base_007
+  - id: similar_005
+    group: similar
+    question: "Bao lâu thì phải hoàn trả phần lương tạm ứng vượt mức quy định?"
+    similar_to: base_010
+  - id: similar_006
+    group: similar
+    question: "Tiền thưởng cho Kiểm soát viên lấy nguồn từ quỹ nào?"
+    similar_to: base_011
+  - id: similar_007
+    group: similar
+    question: "Trong các chức danh ở Điều 4, ai có lương cơ bản cao nhất?"
+    similar_to: base_013
+  - id: similar_008
+    group: similar
+    question: "Ngân hàng chính sách có thuộc phạm vi điều chỉnh của Nghị định không?"
+    similar_to: base_014
+  - id: similar_009
+    group: similar
+    question: "Bảng lương nào áp dụng cho Kiểm soát viên làm việc chuyên trách?"
+    similar_to: base_015
+  - id: similar_010
+    group: similar
+    question: "Đối với doanh nghiệp làm dịch vụ công và đạt kế hoạch, lương tối đa là bao nhiêu?"
+    similar_to: base_018
+
+  # ── volatile (5) — có năm/số cụ thể, PHẢI bị semantic cache BỎ QUA dù giống
+  # câu khác gần như tuyệt đối (chỉ khác số) — false hit nguy hiểm nhất ──
+  - id: volatile_001
+    group: volatile
+    question: "Mức lương tối thiểu vùng năm 2026 theo quy định của Bộ Lao động là bao nhiêu?"
+  - id: volatile_002
+    group: volatile
+    question: "Mức lương tối thiểu vùng năm 2024 theo quy định của Bộ Lao động là bao nhiêu?"
+  - id: volatile_003
+    group: volatile
+    question: "Nếu lợi nhuận thực hiện vượt kế hoạch 15%, mức tiền lương được tính thêm bao nhiêu?"
+  - id: volatile_004
+    group: volatile
+    question: "Nếu lợi nhuận thực hiện vượt kế hoạch 8%, mức tiền lương được tính thêm bao nhiêu?"
+  - id: volatile_005
+    group: volatile
+    question: "Doanh nghiệp thành lập năm 2025 thì mức lương năm đầu tối đa là bao nhiêu?"
+
+  # ── unique (3) — không trùng/giống câu nào khác -> luôn miss cả 2 tầng ────────
+  - id: unique_001
+    group: unique
+    question: "Thành viên Hội đồng quản trị có được kiêm nhiệm chức danh khác trong công ty con không?"
+  - id: unique_002
+    group: unique
+    question: "Kiểm soát viên có quyền yêu cầu cung cấp tài liệu tài chính của doanh nghiệp không?"
+  - id: unique_003
+    group: unique
+    question: "Cơ quan đại diện chủ sở hữu có trách nhiệm báo cáo định kỳ về tiền lương không?"

@@ -14,6 +14,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from typing import TypeVar
 
+from openai.types import CompletionUsage
 from openai.types.chat import ChatCompletion, ChatCompletionMessageParam
 from pydantic import BaseModel
 
@@ -48,6 +49,36 @@ def chat(messages: Messages, params: GenerationParams | None = None) -> str:
         on_rate_limit=lambda: mark_current_key_limited(client),
     )
     return response.choices[0].message.content or ""
+
+
+def chat_with_usage(
+    messages: Messages, params: GenerationParams | None = None, model: str | None = None
+) -> tuple[str, CompletionUsage]:
+    """Như chat(), nhưng trả kèm usage thật từ API (Module III, Bài 3, Section 1-2:
+    cần prompt_tokens/completion_tokens THẬT — không ước lượng — để record_cost()
+    tính tiền chính xác). Tách khỏi chat() để không phá interface `-> str` mà
+    pipeline.py/mọi call site khác đang dùng.
+
+    `model`: override settings.llm_model — cần cho cascade.py (Bài 3, Section 5)
+    gọi 2 model KHÁC NHAU (rẻ rồi mạnh) trong cùng 1 request, việc chat()/GenerationParams
+    hiện tại không hỗ trợ (GenerationParams chỉ có temperature/max_tokens/top_p).
+    """
+    params = params or GenerationParams()
+    client = get_client()
+
+    def _call() -> ChatCompletion:
+        return client.chat.completions.create(
+            model=model or settings.llm_model,
+            messages=messages,
+            **params.to_openai_kwargs(),
+        )
+
+    response = retry_with_backoff(
+        _call,
+        max_retries=settings.llm_max_retries,
+        on_rate_limit=lambda: mark_current_key_limited(client),
+    )
+    return response.choices[0].message.content or "", response.usage
 
 
 def chat_stream(

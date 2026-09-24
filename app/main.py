@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api import routes_admin, routes_assistant, routes_chat, routes_multi_agent
 from app.config import settings
+from app.cost.budget import BudgetExceeded
 from app.guardrails.checks import GuardrailViolation
 
 app = FastAPI(
@@ -45,6 +46,21 @@ def guardrail_violation_handler(request: Request, exc: GuardrailViolation) -> JS
     return JSONResponse(
         status_code=400,
         content={"error": "input_rejected", "reason": exc.reason, "details": exc.details},
+    )
+
+
+@app.exception_handler(BudgetExceeded)
+def budget_exceeded_handler(request: Request, exc: BudgetExceeded) -> JSONResponse:
+    """Module III, Bài 3, Section 7 — user vượt hard limit ngày → HTTP 429."""
+    return JSONResponse(
+        status_code=429,
+        content={
+            "error": "budget_exceeded",
+            "reason": exc.reason,
+            "user_id": exc.user_id,
+            "spent_usd": round(exc.spent, 4),
+            "cap_usd": exc.cap,
+        },
     )
 
 
