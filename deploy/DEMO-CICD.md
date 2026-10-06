@@ -11,7 +11,7 @@ export PROJECT_ID=llm-engineer-demo
 ./deploy/deploy.sh
 ```
 
-### 2. Nạp secret thật
+### 2. Thêm secret vào Gcloud
 
 Ba secret vừa tạo còn là chuỗi `PLACEHOLDER`. Phải nạp giá trị thật — nếu không,
 `/health` vẫn trả 200 nhưng mọi request gọi OpenAI sẽ hỏng.
