@@ -1,7 +1,5 @@
 # CI/CD trên Google Compute Engine
 
----
-
 ## Chuẩn bị
 
 ### 1. Bootstrap hạ tầng
@@ -9,6 +7,13 @@
 ```bash
 export PROJECT_ID=llm-engineer-demo
 ./deploy/deploy.sh
+```
+
+**Windows — Bash (Git Bash/WSL):**
+
+```bash
+export PROJECT_ID=llm-engineer-demo
+bash ./deploy/deploy.sh
 ```
 
 ### 2. Thêm secret vào Gcloud
@@ -33,7 +38,36 @@ printf '%s' "$LANGSMITH_KEY" | gcloud secrets versions add llm-engineer-langsmit
 unset LANGSMITH_KEY
 ```
 
-`read -rs` để key không lọt vào lịch sử shell. Kiểm tra lại:
+**Windows — Bash (Git Bash/WSL):**
+
+```bash
+read -r -s -p "OpenAI API key (sk-...): " OPENAI_KEY; echo
+printf '%s' "$OPENAI_KEY" | gcloud secrets versions add llm-engineer-openai-api-keys \
+    --project="$PROJECT_ID" --data-file=-
+unset OPENAI_KEY
+
+read -r -s -p "Tavily API key (tvly-...): " TAVILY_KEY; echo
+printf '%s' "$TAVILY_KEY" | gcloud secrets versions add llm-engineer-tavily-api-key \
+    --project="$PROJECT_ID" --data-file=-
+unset TAVILY_KEY
+
+read -r -s -p "LangSmith API key (lsv2_...): " LANGSMITH_KEY; echo
+printf '%s' "$LANGSMITH_KEY" | gcloud secrets versions add llm-engineer-langsmith-api-key \
+    --project="$PROJECT_ID" --data-file=-
+unset LANGSMITH_KEY
+```
+
+`read` nhập key tương tác để giá trị không nằm trong câu lệnh lưu ở lịch sử shell; `-s` ẩn ký tự khi nhập. Khối gốc phía trên dùng cú pháp prompt của Zsh; khối Windows dùng `read -r -s -p` của Bash. Kiểm tra lại:
+
+```bash
+for s in openai-api-keys tavily-api-key langsmith-api-key; do
+    printf '%-18s ' "$s"
+    gcloud secrets versions access latest --secret="llm-engineer-$s" --project="$PROJECT_ID" \
+        | grep -qx PLACEHOLDER && echo "CHƯA NẠP" || echo "đã nạp"
+done
+```
+
+**Windows — Bash (Git Bash/WSL):**
 
 ```bash
 for s in openai-api-keys tavily-api-key langsmith-api-key; do
@@ -58,8 +92,21 @@ gcloud compute ssh llm-app-vm --zone="$ZONE" --project="$PROJECT_ID" --command='
 '
 ```
 
+**Windows — Bash (Git Bash/WSL):**
+
+```bash
+export ZONE=asia-southeast1-b
+gcloud compute ssh llm-app-vm --zone="$ZONE" --project="$PROJECT_ID" --command='
+    set -e
+    sudo sed -i "s/^MONITORING_ENABLED=.*/MONITORING_ENABLED=true/" /opt/llm-app/.env
+    sudo grep "^MONITORING_ENABLED=" /opt/llm-app/.env
+    sudo systemctl restart llm-app
+'
+```
+
 Phải in ra `MONITORING_ENABLED=true`. Chạy lại `deploy.sh` sẽ ghi đè `.env` về
 `false` — lần sau dùng `MONITORING_ENABLED=true ./deploy/deploy.sh`.
+Trên Windows — Bash, dùng `MONITORING_ENABLED=true bash ./deploy/deploy.sh`.
 
 ### 4. Khai báo trên GitHub
 
@@ -72,11 +119,38 @@ Settings → Secrets and variables → Actions:
 | Variable | `VM_USER` | `deploy` |
 | Variable | `APP_URL` | `https://<IP-đổi-dấu-chấm-thành-gạch>.sslip.io` |
 
+**Windows — Bash: sao chép private key vào clipboard** (dùng thay `pbcopy`):
+
+```bash
+# Git Bash; cũng dùng được trong WSL nếu đã bật Windows interoperability.
+clip.exe < ~/.ssh/llm-app-deploy
+```
+
+Dán vào secret `VM_SSH_KEY` trên GitHub. Không chia sẻ nội dung key trong chat.
+Nếu WSL không có `clip.exe`, mở file key bằng trình soạn thảo và sao chép toàn bộ
+nội dung, gồm cả dòng BEGIN/END. Dùng key trong đúng môi trường đã chạy bootstrap.
+
+**Windows — Bash: lấy IP và khai báo tên miền:**
+
+```bash
+VM_HOST=$(gcloud compute addresses describe llm-app-ip \
+    --region=asia-southeast1 --project="$PROJECT_ID" --format='get(address)')
+export VM_HOST
+export DOMAIN="${VM_HOST//./-}.sslip.io"
+printf 'VM_HOST=%s\nAPP_URL=https://%s\n' "$VM_HOST" "$DOMAIN"
+```
+
 **Không** đặt `ENABLE_WIF_DEPLOY`. Biến đó bật `cd.yml`, mà cả hai workflow đều
 treo trên `workflow_run` của `ci` — đặt vào là mỗi push deploy hai lần lên cùng
 một VM.
 
 ### 5. Push lần đầu
+
+```bash
+git push origin main
+```
+
+**Windows — Bash (Git Bash/WSL):**
 
 ```bash
 git push origin main
@@ -101,6 +175,18 @@ Repo → **Packages** → `llm-engineer-demo` → **Package settings** → **Dan
       lần deploy đầu**: `release.sh` do pipeline scp lên, trước đó chưa tồn tại.
 - [ ] `git checkout .` — không còn thay đổi dở dang từ lần thử trước
 
+**Windows — Bash: kiểm tra health và SSH** (sau lần deploy đầu):
+
+```bash
+curl -s "https://${DOMAIN}/health"
+ssh -i ~/.ssh/llm-app-deploy "deploy@${VM_HOST}" \
+    'echo OK; sudo /opt/llm-app/release.sh status'
+```
+
+`git checkout .` cũng chạy được trên Git Bash/WSL, nhưng sẽ bỏ các thay đổi
+chưa stage trong thư mục hiện tại. Chỉ chạy nếu bạn muốn bỏ những thay đổi đó.
+
+
 ---
 
 ## Màn 1 — Commit tốt: pipeline xanh (5 phút)
@@ -115,11 +201,23 @@ Thêm một trường vào `health()` trong `app/main.py`:
 git add app/main.py && git commit -m "health: thêm trường version" && git push
 ```
 
+**Windows — Bash (Git Bash/WSL):**
+
+```bash
+git add app/main.py && git commit -m "health: thêm trường version" && git push
+```
+
 **Xem tab Actions:** workflow `ci` chạy trước (lint → ruff → pytest), xanh xong
 mới tới `deploy` (build → push ghcr → ssh → smoke).
 
 ```bash
 curl -s https://<domain>/health     # → có "version":"v2"
+```
+
+**Windows — Bash (Git Bash/WSL):**
+
+```bash
+curl -s "https://${DOMAIN}/health"     # → có "version":"v2"
 ```
 
 ---
@@ -128,6 +226,12 @@ curl -s https://<domain>/health     # → có "version":"v2"
 
 Trong `app/observability/sampling.py`, hàm `should_sample()`: chuyển khối
 `if cache_hit:` lên **trước** khối `if error:`.
+
+```bash
+git commit -am "sampling: gộp nhánh cache_hit lên trước" && git push
+```
+
+**Windows — Bash (Git Bash/WSL):**
 
 ```bash
 git commit -am "sampling: gộp nhánh cache_hit lên trước" && git push
@@ -142,7 +246,19 @@ trong `tests/test_observability.py`.
 curl -s https://<domain>/health     # → vẫn là v2, bản cũ nguyên vẹn
 ```
 
+**Windows — Bash (Git Bash/WSL):**
+
+```bash
+curl -s "https://${DOMAIN}/health"     # → vẫn là v2, bản cũ nguyên vẹn
+```
+
 Hoàn tác trước khi sang màn 3:
+
+```bash
+git revert --no-edit HEAD && git push
+```
+
+**Windows — Bash (Git Bash/WSL):**
 
 ```bash
 git revert --no-edit HEAD && git push
@@ -157,6 +273,12 @@ Trong `app/config.py`, sửa một ký tự ở `rag_source_dir`:
 ```
 "./data/legal_docs"  →  "./data/legal_doc"
 ```
+
+```bash
+git commit -am "config: sửa đường dẫn tài liệu" && git push
+```
+
+**Windows — Bash (Git Bash/WSL):**
 
 ```bash
 git commit -am "config: sửa đường dẫn tài liệu" && git push
@@ -178,6 +300,12 @@ test nào phủ đường dẫn đó.
 
 ```bash
 curl -s https://<domain>/health     # → vẫn sống, vẫn là bản tốt
+```
+
+**Windows — Bash (Git Bash/WSL):**
+
+```bash
+curl -s "https://${DOMAIN}/health"     # → vẫn sống, vẫn là bản tốt
 ```
 
 ---
@@ -204,10 +332,22 @@ curl -s https://<domain>/health     # → vẫn sống, vẫn là bản tốt
 gcloud compute instances stop llm-app-vm --zone=asia-southeast1-b
 ```
 
+**Windows — Bash (Git Bash/WSL):**
+
+```bash
+gcloud compute instances stop llm-app-vm --zone=asia-southeast1-b
+```
+
 **Xoá sạch để dựng lại từ đầu:**
 
 ```bash
 PROJECT_ID=llm-engineer-demo ./deploy/teardown.sh
+```
+
+**Windows — Bash (Git Bash/WSL):**
+
+```bash
+PROJECT_ID=llm-engineer-demo bash ./deploy/teardown.sh
 ```
 
 Script xoá VM, IP tĩnh, 3 secret, service account, firewall và SSH key local —
@@ -226,12 +366,24 @@ Giữ lại key local để đỡ phải cập nhật `VM_SSH_KEY` trên GitHub:
 KEEP_SSH_KEY=true PROJECT_ID=llm-engineer-demo ./deploy/teardown.sh
 ```
 
+**Windows — Bash (Git Bash/WSL):**
+
+```bash
+KEEP_SSH_KEY=true PROJECT_ID=llm-engineer-demo bash ./deploy/teardown.sh
+```
+
 > ⚠ **Let's Encrypt giới hạn 5 chứng chỉ trùng nhau mỗi tuần.** Domain là
 > `<IP>.sslip.io`, nên teardown rồi dựng lại giữ nguyên IP tĩnh là xin lại đúng
 > tên miền đó — lần thứ 6 trong tuần, bước 7 của `deploy.sh` đỏ. `teardown.sh`
 > xoá luôn IP tĩnh nên lần sau sẽ lấy IP mới và không dính giới hạn.
 
 Nếu giữ VM mà muốn thu hồi quyền SSH của CI khi khoá học kết thúc:
+
+```bash
+gcloud compute instances remove-metadata llm-app-vm --keys=ssh-keys
+```
+
+**Windows — Bash (Git Bash/WSL):**
 
 ```bash
 gcloud compute instances remove-metadata llm-app-vm --keys=ssh-keys
